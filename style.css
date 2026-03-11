@@ -1,132 +1,194 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:system-ui;
 }
 
-body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #0b0b0b;
-    color: #f1f1f1;
+body{
+background:#0b0b0b;
+color:white;
 }
 
-/* ===== HEADER ===== */
-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 22px 40px;
-    border-bottom: 1px solid #1f1f1f;
+/* help bar */
+
+.help-bar{
+position:fixed;
+top:0;
+width:100%;
+background:white;
+color:black;
+text-align:center;
+padding:6px;
+font-size:14px;
+z-index:1000;
+cursor:pointer;
 }
 
-header a {
-    color: #fff;
-    text-decoration: none;
-    margin-left: 25px;
-    font-size: 14px;
+.help-bar span{
+color:#0a84ff;
+font-weight:bold;
 }
 
-/* ===== HERO ===== */
-.hero {
-    text-align: center;
-    padding: 140px 40px;
-    max-width: 1000px;
-    margin: auto;
+/* nav */
+
+.nav{
+margin-top:32px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:10px 20px;
 }
 
-.hero h1 {
-    font-size: 48px;
-    margin-bottom: 20px;
+.nav a{
+margin-right:15px;
+color:white;
+text-decoration:none;
+font-size:14px;
 }
 
-.hero p {
-    font-size: 18px;
-    color: #b5b5b5;
+.right{
+display:flex;
+align-items:center;
 }
 
-/* ===== SECTIONS ===== */
-section {
-    padding: 90px 40px;
+.profile{
+width:34px;
+height:34px;
+border-radius:50%;
+object-fit:cover;
+margin-left:10px;
 }
 
-.section-title {
-    font-size: 28px;
-    text-align: center;
-    margin-bottom: 60px;
+/* hamburger */
+
+.menu{
+display:none;
+position:absolute;
+top:70px;
+left:20px;
+background:#161616;
+padding:15px;
+border-radius:10px;
+flex-direction:column;
 }
 
-/* ===== GRID ===== */
-.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 30px;
-    max-width: 1200px;
-    margin: auto;
+.menu a{
+display:block;
+padding:6px 0;
+cursor:pointer;
 }
 
-/* ===== CARD ===== */
-.card {
-    background-color: #161616;
-    padding: 28px;
-    border-radius: 14px;
+.menu-btn{
+cursor:pointer;
 }
 
-/* Image placeholder */
-.img-box {
-    width: 100%;
-    height: 180px;
-    background: #ffffff;
-    border-radius: 8px;
-    margin-bottom: 20px;
+/* hero */
+
+.hero{
+position:relative;
+height:280px;
+display:flex;
+align-items:center;
+justify-content:center;
 }
 
-.card h3 {
-    font-size: 20px;
-    margin-bottom: 10px;
+.hero-logo{
+position:absolute;
+width:60%;
+opacity:0.12;
+filter:blur(6px);
 }
 
-.card p {
-    font-size: 14px;
-    color: #bdbdbd;
-    margin-bottom: 18px;
+/* search */
+
+.search-container{
+width:80%;
 }
 
-.button {
-    display: inline-block;
-    padding: 12px 22px;
-    background: linear-gradient(135deg, #0a84ff, #005bd1);
-    color: #fff;
-    border-radius: 25px;
-    text-decoration: none;
-    font-size: 14px;
+.search-container input{
+width:100%;
+padding:16px;
+border-radius:40px;
+border:none;
+background:rgba(200,200,200,0.2);
+backdrop-filter:blur(10px);
+color:white;
+font-size:16px;
 }
 
-/* ===== FORM ===== */
-.form {
-    max-width: 400px;
-    margin: auto;
-    background: #161616;
-    padding: 40px;
-    border-radius: 14px;
+/* divider */
+
+.divider{
+width:100%;
+height:1px;
+background:#222;
+margin-top:10px;
 }
 
-.form input {
-    width: 100%;
-    padding: 12px;
-    margin-bottom: 16px;
-    border-radius: 8px;
-    border: none;
+/* sections */
+
+.section{
+padding:25px 20px;
 }
 
-/* ===== FLOATING WHATSAPP ===== */
-.whatsapp {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #25D366;
-    padding: 14px 22px;
-    border-radius: 30px;
-    color: #fff;
-    text-decoration: none;
-    font-weight: 600;
+.section h2{
+margin-bottom:15px;
+}
+
+/* horizontal scroll */
+
+.scroll-row{
+display:flex;
+overflow-x:auto;
+gap:15px;
+padding-bottom:10px;
+}
+
+/* cards */
+
+.card{
+min-width:200px;
+background:#161616;
+border-radius:14px;
+padding:15px;
+}
+
+.card img{
+width:100%;
+height:120px;
+object-fit:cover;
+border-radius:8px;
+margin-bottom:10px;
+}
+
+.price{
+font-size:18px;
+font-weight:bold;
+margin-bottom:5px;
+}
+
+.vehicle{
+color:#aaa;
+font-size:13px;
+}
+
+.tag{
+display:inline-block;
+background:#333;
+padding:4px 8px;
+border-radius:6px;
+font-size:11px;
+margin-right:5px;
+margin-top:5px;
+}
+
+.button{
+margin-top:10px;
+display:inline-block;
+background:white;
+color:black;
+padding:8px 14px;
+border-radius:8px;
+text-decoration:none;
 }

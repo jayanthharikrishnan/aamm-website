@@ -1,34 +1,86 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AAMM Auto Spares</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>AAMM Auto Spares</title>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<header>
-    <h2>AAMM Auto Spares</h2>
-    <nav>
-        <a href="products.html">Products</a>
-        <a href="login.html">Login</a>
-    </nav>
-</header>
-
-<div class="hero">
-    <h1>Premium Automobile Spare Parts</h1>
-    <p>Engineering-grade components trusted by professionals.</p>
+<div class="help-bar" onclick="window.location.href='tel:9600715822'">
+Need help? Call us: <span>9600715822</span>
 </div>
 
-<section>
-    <h2 class="section-title">Popular Categories</h2>
-    <div class="grid">
-        <div class="card"><h3>Electrical Parts</h3></div>
-        <div class="card"><h3>Motor Components</h3></div>
-        <div class="card"><h3>Bearings & Bushes</h3></div>
-        <div class="card"><h3>Starter & Charging</h3></div>
-    </div>
+
+<header class="nav">
+
+<div class="left">
+
+<div class="menu-btn">☰</div>
+
+<div class="menu">
+
+<a>Buy old parts</a>
+<a>Exchange</a>
+<a>Previous orders</a>
+<a>Products chart</a>
+<a>About</a>
+<a>Brands we sell</a>
+<a>Contact us</a>
+
+</div>
+
+</div>
+
+
+<div class="right">
+
+<a href="https://maps.google.com">Location</a>
+<a>About</a>
+
+<img src="images/logo.jpeg" class="profile">
+
+</div>
+
+</header>
+
+
+<section class="hero">
+
+<img src="images/logo.jpeg" class="hero-logo">
+
+<div class="search-container">
+<input id="search" placeholder="Search parts (Bolero armature, Swift starter...)">
+</div>
+
 </section>
 
-<a class="whatsapp" href="https://wa.me/919344898473">WhatsApp Us</a>
+
+<div class="divider"></div>
+
+
+<section class="section">
+
+<h2>Recently Visited</h2>
+
+<div class="scroll-row" id="recently"></div>
+
+</section>
+
+
+<div class="divider"></div>
+
+
+<section class="section">
+
+<h2>Top Selling</h2>
+
+<div class="scroll-row" id="topselling"></div>
+
+</section>
+
+<script src="script.js"></script>
+
 </body>
 </html>

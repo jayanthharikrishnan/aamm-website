@@ -1,104 +1,81 @@
-let allProducts = [];
+async function loadProducts(){
 
-async function loadProducts() {
+const res = await fetch("/products")
+const products = await res.json()
 
-const response = await fetch("/products");
-const products = await response.json();
+const top=document.getElementById("topselling")
+const recent=document.getElementById("recently")
 
-allProducts = products;
+if(top){
 
-displayProducts(products);
-
-}
-
-function displayProducts(products) {
-
-const container = document.getElementById("products");
-
-if (!container) return;
-
-container.innerHTML = "";
-
-products.forEach(p => {
-
-const message = encodeURIComponent(
-`Hello, I want to order:
-
-${p.name}
-Price: ₹${p.price}`
-);
-
-const whatsappLink = `https://wa.me/919344898473?text=${message}`;
-
-const card = document.createElement("div");
-card.className = "card";
-
-card.innerHTML = `
-<img src="${p.image}" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:15px;">
-<h3>${p.name}</h3>
-<p>${p.description}</p>
-<p>₹${p.price}</p>
-
-<a href="${whatsappLink}" target="_blank" class="button" style="margin-top:10px;display:inline-block;">
-Order on WhatsApp
-</a>
-`;
-
-container.appendChild(card);
-
-});
-
-}
-
-function searchProducts() {
-
-const query = document.getElementById("search").value.toLowerCase();
-
-const filtered = allProducts.filter(p =>
-p.name.toLowerCase().includes(query) ||
-p.description.toLowerCase().includes(query)
-);
-
-displayProducts(filtered);
-
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-
-loadProducts();
-
-const searchInput = document.getElementById("search");
-
-if(searchInput){
-searchInput.addEventListener("input", searchProducts);
-}
-
-});
-
-async function addProduct() {
-
-const name = document.getElementById("name").value;
-const description = document.getElementById("description").value;
-const price = document.getElementById("price").value;
-const image = document.getElementById("image").value;
-
-await fetch("/add-product", {
-
-method: "POST",
-
-headers: {
-"Content-Type": "application/json"
-},
-
-body: JSON.stringify({
-name,
-description,
-price,
-image
+products.slice(0,5).forEach(p=>{
+top.appendChild(createCard(p))
 })
 
-});
+}
 
-alert("Product added");
+if(recent){
+
+products.slice(0,5).forEach(p=>{
+recent.appendChild(createCard(p))
+})
 
 }
+
+}
+
+
+function createCard(p){
+
+const card=document.createElement("div")
+card.className="card"
+
+const msg=encodeURIComponent(
+`Hello,
+I want to order:
+
+Part: ${p.name}
+Price: ₹${p.price}`
+)
+
+card.innerHTML=`
+<img src="${p.image}">
+
+<div class="price">₹${p.price}</div>
+
+<h3>${p.name}</h3>
+
+<div class="vehicle">${p.vehicle || ""}</div>
+
+<div>Brand: ${p.brand || ""}</div>
+
+<a class="button" href="https://wa.me/919344898473?text=${msg}" target="_blank">
+Order
+</a>
+`
+
+return card
+}
+
+
+/* search redirect */
+
+const search=document.getElementById("search")
+
+if(search){
+
+search.addEventListener("keypress",(e)=>{
+
+if(e.key==="Enter"){
+
+const q=search.value
+window.location.href=`products.html?q=${q}`
+
+}
+
+})
+
+}
+
+
+loadProducts()
