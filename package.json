@@ -13,8 +13,11 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
+<<<<<<< HEAD
     "node": "^25.9.0",
     "server.js": "^1.0.0",
+=======
+>>>>>>> e6ee3c28bbdeaf1bfe826ea47d91c4d83d2ca185
     "sqlite3": "^5.1.7"
   }
 }
