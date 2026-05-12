@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product – AAMM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="product-page">
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- TOP BAR -->
+<header class="product-topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button class="back-btn" onclick="window.history.back()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <button class="icon-btn cart-btn" onclick="window.location.href='cart.html'">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 01-8 0"/>
+      </svg>
+      <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </div>
+  <div class="logo">
+    <img src="images/logo.jpeg" alt="AAMM" class="logo-img">
+  </div>
+</header>
+
+<!-- CONTENT -->
+<main class="product-content">
+
+  <div class="product-img-wrap" id="productImgWrap" onclick="openLightbox()"></div>
+
+  <div class="product-info">
+    <div class="product-name" id="productName">—</div>
+    <div class="product-description" id="productDesc">—</div>
+    <div class="product-stars">★★★★★</div>
+    <div class="product-price" id="productPrice">—</div>
+  </div>
+
+  <div class="brands-row">
+    <span class="brands-label">Brands available :</span>
+    <div id="brandCapsules" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;"></div>
+  </div>
+
+  <div class="product-actions">
+    <button class="btn-buy" id="buyBtn">
+      Buy &nbsp;<span class="buy-brand" id="buyBrandLabel">TVS</span>
+      <span class="buy-price-tag" id="buyPriceTag"></span>
+    </button>
+    <div class="action-row">
+      <button class="btn-exchange">Exchange</button>
+      <button class="btn-buyold">Buy Old Part</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- BOTTOM BAR -->
+<div class="product-bottom-bar">
+  <button class="btn-addcart" id="addCartBtn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+      <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <path d="M16 10a4 4 0 01-8 0"/>
+    </svg>
+    Add to Cart
+  </button>
+  <button class="btn-talkto" onclick="window.location.href='https://wa.me/919344898473'">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.124 1.532 5.855L.057 23.492a.5.5 0 00.613.613l5.637-1.475A11.947 11.947 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22a9.944 9.944 0 01-5.167-1.443l-.371-.22-3.847 1.008 1.008-3.746-.243-.387A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+    </svg>
+    Talk to Us
+  </button>
+</div>
+
+<script src="script.js"></script>
+<script>
+  const BRANDS = ["TVS", "KNY", "Ascot", "Altron"];
+  let selectedBrand  = BRANDS[0];
+  let currentProduct = null;
+
+  function renderBrands() {
+    const wrap = document.getElementById("brandCapsules");
+    wrap.innerHTML = "";
+    BRANDS.forEach(b => {
+      const btn = document.createElement("button");
+      btn.className = "brand-capsule" + (b === selectedBrand ? " selected" : "");
+      btn.textContent = b;
+      btn.addEventListener("click", () => {
+        selectedBrand = b;
+        document.getElementById("buyBrandLabel").textContent = b;
+        document.getElementById("buyPriceTag").textContent =
+          currentProduct?.price ? "(₹" + currentProduct.price + ")" : "";
+        renderBrands();
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function openLightbox() {
+    if (!currentProduct?.image) return;
+    document.getElementById("lightbox").classList.add("active");
+  }
+  function closeLightbox() {
+    document.getElementById("lightbox").classList.remove("active");
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    updateCartCount();
+
+    const raw = sessionStorage.getItem("aamm_product");
+    if (!raw) { document.getElementById("productName").textContent = "Product not found"; return; }
+
+    currentProduct = JSON.parse(raw);
+    const displayName = currentProduct.display_name || currentProduct.name;
+
+    document.getElementById("productName").textContent  = displayName;
+    document.getElementById("productDesc").textContent  = currentProduct.description || "Quality auto spare part for reliable performance.";
+    document.getElementById("productPrice").textContent = currentProduct.price ? "₹" + currentProduct.price : "Price on request";
+    document.title = displayName + " – AAMM";
+
+    // Image
+    const imgWrap = document.getElementById("productImgWrap");
+    if (currentProduct.image) {
+      const img = document.createElement("img");
+      img.src = currentProduct.image;
+      img.alt = displayName;
+      imgWrap.appendChild(img);
+      document.getElementById("lightboxImg").src = currentProduct.image;
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "prod-img-placeholder";
+      ph.textContent = displayName;
+      imgWrap.appendChild(ph);
+      imgWrap.style.cursor = "default";
+    }
+
+    renderBrands();
+    document.getElementById("buyBrandLabel").textContent = selectedBrand;
+    document.getElementById("buyPriceTag").textContent   = currentProduct.price ? "(₹" + currentProduct.price + ")" : "";
+
+    document.getElementById("buyBtn").addEventListener("click", () => {
+      startOrder([{ ...currentProduct, brand: selectedBrand, qty: 1 }], false);
+    });
+
+    document.getElementById("addCartBtn").addEventListener("click", () => {
+      addToCart(currentProduct, selectedBrand);
+    });
+  });
+</script>
+</body>
+</html>

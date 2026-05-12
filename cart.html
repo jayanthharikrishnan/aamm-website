@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cart – AAMM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="top-bar">
+  <div class="top-left">
+    <button class="icon-btn" onclick="window.history.back()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <button class="icon-btn cart-btn">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 01-8 0"/>
+      </svg>
+      <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </div>
+  <div class="logo">
+    <img src="images/logo.jpeg" alt="AAMM" class="logo-img">
+  </div>
+</header>
+
+<main class="cart-page-content">
+  <h3 class="section-title" style="margin-bottom:18px;">Your Cart</h3>
+  <div id="cartItems"></div>
+  <div id="cartSummary" style="display:none;">
+    <div class="cart-total-bar">
+      <span class="cart-total-label">Total</span>
+      <span class="cart-total-amount" id="cartTotal">₹0</span>
+    </div>
+    <button class="cart-checkout-btn" onclick="checkoutCart()">
+      Proceed to Order on WhatsApp
+    </button>
+  </div>
+</main>
+
+<script src="script.js"></script>
+<script>
+  function renderCart() {
+    const cart      = getCart();
+    const itemsEl   = document.getElementById("cartItems");
+    const summaryEl = document.getElementById("cartSummary");
+
+    updateCartCount();
+    itemsEl.innerHTML = "";
+
+    if (!cart.length) {
+      itemsEl.innerHTML = `
+        <div class="cart-empty">
+          <div style="font-size:52px;margin-bottom:14px;">🛒</div>
+          <div>Your cart is empty</div>
+          <button onclick="window.location.href='index.html'"
+            style="margin-top:20px;padding:12px 28px;background:#25D366;
+            color:#fff;border:none;border-radius:12px;font-size:14px;
+            font-weight:700;cursor:pointer;">
+            Browse Products
+          </button>
+        </div>`;
+      summaryEl.style.display = "none";
+      return;
+    }
+
+    let total = 0;
+    cart.forEach((item, idx) => {
+      const imgSrc  = item.image || null;
+      const imgHtml = imgSrc
+        ? `<img src="${imgSrc}" alt="${item.display_name||item.name}">`
+        : `<div class="cart-img-placeholder">${item.display_name||item.name}</div>`;
+
+      const sub = (item.price||0) * (item.qty||1);
+      total += sub;
+
+      const el = document.createElement("div");
+      el.className = "cart-item";
+      el.innerHTML = `
+        ${imgHtml}
+        <div class="cart-item-info">
+          <div class="cart-item-name">${item.display_name||item.name}</div>
+          <div class="cart-item-brand">Brand: ${item.brand||"—"}</div>
+          <div class="cart-item-price">
+            ${item.price ? "₹"+item.price+" × "+item.qty+" = ₹"+sub : "Price on request"}
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+            <button onclick="changeQty(${idx},-1)" style="width:30px;height:30px;border-radius:50%;
+              border:1.5px solid #999;background:#fff;color:#111;font-size:18px;
+              font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">−</button>
+            <span style="font-size:14px;font-weight:700;color:#111;">${item.qty||1}</span>
+            <button onclick="changeQty(${idx},1)" style="width:30px;height:30px;border-radius:50%;
+              border:1.5px solid #999;background:#fff;color:#111;font-size:18px;
+              font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">+</button>
+          </div>
+        </div>
+        <button class="cart-item-remove" onclick="removeItem(${idx})">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c00" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+          </svg>
+        </button>
+      `;
+      itemsEl.appendChild(el);
+    });
+
+    document.getElementById("cartTotal").textContent = "₹" + total;
+    summaryEl.style.display = "block";
+  }
+
+  function changeQty(idx, delta) {
+    const cart = getCart();
+    cart[idx].qty = (cart[idx].qty||1) + delta;
+    if (cart[idx].qty <= 0) cart.splice(idx, 1);
+    saveCart(cart);
+    renderCart();
+  }
+
+  function removeItem(idx) {
+    const cart = getCart();
+    cart.splice(idx, 1);
+    saveCart(cart);
+    renderCart();
+  }
+
+  function checkoutCart() {
+    const cart = getCart();
+    if (!cart.length) return;
+    startOrder(cart, true);
+  }
+
+  renderCart();
+</script>
+</body>
+</html>
