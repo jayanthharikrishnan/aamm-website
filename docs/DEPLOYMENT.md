@@ -1,4 +1,4 @@
-# AAMM installation and deployment
+# Alagar Automobiles installation and deployment
 
 ## Local installation
 
@@ -30,11 +30,11 @@ sqlite3 /secure-backups/aamm-before-update.db 'SELECT COUNT(*) FROM products; SE
 
 Check for `ok`, retain the record counts, and keep the backup outside the checkout and public assets. Test the new application with a separate restored copy first. Do not overwrite the live database with the repository copy: the live database may contain newer orders or customers.
 
-The updated startup verifies SQLite integrity and creates a consistent `backups/aamm-before-v2-*.db` snapshot before its first v2 migration. This automatic snapshot is a fallback, not a replacement for the verified off-server backup. It then uses additive initialization and migrations. It preserves nonempty product tables and existing identifiers instead of deleting records. Review migrations before release. Keep a verified backup until the upgraded service and restart tests pass. New writes made after release must be reconciled before restoring an older backup.
+The updated startup verifies SQLite integrity and creates a consistent `backups/aamm-before-v3-*.db` snapshot before its first v3 migration. This automatic snapshot is a fallback, not a replacement for the verified off-server backup. It then uses additive initialization and migrations. It preserves nonempty product tables and existing identifiers instead of deleting records. Review migrations before release. Keep a verified backup until the upgraded service and restart tests pass. New writes made after release must be reconciled before restoring an older backup.
 
 ## Render service configuration
 
-The repository does not include access to the current Render account or its service settings. Its disk attachment, instance plan, environment variables, deploy hooks and production backup history were not verified.
+During the follow-up, the owner connected the Render workspace and the service was inspected as using a Free plan without an attached persistent disk. The nonsecret administrator ID/mobile and production origin/environment settings were updated while preserving existing secrets. These changes do not make checkout-local SQLite durable. Production backup history, provider activation and persistent storage remain separate verification requirements.
 
 Configure a Node web service with:
 
@@ -57,9 +57,9 @@ SQLite is intended for a single application instance on this persistent volume. 
 
 ## Authentication and secrets
 
-Set `ADMIN_PHONE` and a unique `ADMIN_PASSWORD` of at least 12 characters in the deployment secret manager. Do not reuse the old hardcoded password. Admin authentication uses server-side authorization; browser-local flags must never grant admin access.
+The confirmed administrator ID/mobile `9344898473` is recorded as nonsecret server configuration in `config/business.json`. Override it with `ADMIN_ID`/`ADMIN_PHONE` if the authorized owner changes. Set a unique `ADMIN_PASSWORD` of at least 12 characters in the deployment secret manager. No password is stored in the repository; an ID by itself cannot sign in. Do not reuse the old hardcoded password. Admin authentication uses server-side authorization; browser-local flags must never grant admin access.
 
-Customer phone verification needs all three Twilio Verify values in `.env.example`. Configure a legitimate Twilio Verify service and account, then test sending, expiry, invalid codes, resend limits and successful verification against actual devices. With no provider credentials, OTP remains unavailable and must return a configuration error rather than a fake code.
+Customer phone verification and optional administrator phone OTP need all three Twilio Verify values in `.env.example`. Configure a legitimate Twilio Verify service and account, then test sending, expiry, invalid codes, resend limits and successful verification against actual devices. With no provider credentials, OTP remains unavailable and must return a configuration error rather than a fake code.
 
 Never commit `.env`, database backups, provider keys or real customer exports. The original database remains in Git history from the existing repository. Blocking its HTTP route prevents current direct web downloads but does not remove historical Git exposure. The business owner should review repository visibility and remove sensitive historical data using an agreed cleanup procedure before treating the repository as a secure data store.
 
@@ -94,3 +94,16 @@ Then deploy the selected commit, inspect the health endpoint and customer/admin 
 A new WhatsApp order enquiry returns a one-time 256-bit `tracking_token` alongside its reference. The application stores only its SHA-256 hash; keep the returned receipt in the customer's browser. Idempotent retries retain the original secret and do not return it again. `POST /tracking-guest` takes `{reference, token}` in the request body, uses constant-time verification and returns the actual internal status history without customer name, phone, address or WhatsApp message. Possessing only a reference or phone is insufficient. A lost guest token requires verified account access or help from AAMM.
 
 Authenticated `GET /my/requests` returns only the signed-in phone's enquiries/exchanges, statuses and quoted amounts. Internal administrator notes are excluded. Account, receipt, tracking and notification responses use `Cache-Control: no-store`. See [API.md](API.md) for endpoint contracts.
+
+
+## Customer invoices and optional SMS activation
+
+Confirming a reviewed order automatically issues one immutable commercial invoice with a unique sequential annual number. Pickup has zero delivery charges; confirm actual delivery fees for delivery orders. Print or save PDF through the protected bill page; customers can use a signed-in account or their guest tracking secret. A payment receipt is issued only after genuine provider capture verification. Documents are commercial bills, **not GST tax invoices**; supply verified legal/tax details and implement appropriate tax logic before representing tax-credit documents. Optional `BILLING_BUSINESS_ADDRESS` must contain the genuine business billing address; leave it empty until verified.
+
+The nonsecret administrator ID is prepared in code; production password/OTP service activation still requires access to the host's environment settings. The connected Render service can receive environment changes, but a GitHub source update alone still does not set missing credentials or prove SMS/payment activation.
+
+For automatic transactional SMS, configure a legitimate Twilio account plus a messaging service or SMS-capable sender (`TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER`). Twilio Verify alone does not configure invoice/order notification SMS. Complete any provider/account and India routing/template approvals applicable to the actual sender, then test genuine recipient delivery. The persistent outbox records provider `queued`/`sent`/`delivered` states separately; refresh actual provider delivery status from the admin dashboard. No message is represented as delivered merely because it was accepted. Interrupted sends with uncertain outcome are not automatically resent.
+
+Before enabling real commerce, test invoice idempotency, order-confirmation rollback on unknown delivery fees, immutable snapshots after a product price change, owner/guest access protection, provider-backed receipts, SMS errors and provider status refresh on a restored database copy. The tracked database is not modified by tests.
+
+Transactional SMS is restricted to customer phones verified by the legitimate OTP provider. Unauthenticated guest form submissions do not enqueue SMS; they retain the in-app record and private guest receipt. Staff-confirmed order/invoice updates and verified-payment updates can enqueue SMS for a verified customer once the sender is configured. This avoids sending paid messages to arbitrary numbers submitted through public forms.
