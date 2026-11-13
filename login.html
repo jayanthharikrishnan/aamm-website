@@ -1,23 +1,33 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Login – AAMM</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-<header>
-    <h2>AAMM Auto Spares</h2>
-</header>
-
-<section>
-    <div class="form">
-        <h3>Login</h3><br>
-        <input placeholder="Email">
-        <input placeholder="Password" type="password">
-        <a class="button" href="dashboard.html">Login</a>
-    </div>
-</section>
-
-</body>
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Alagar Automobiles — explore the AAMM automotive spare-parts catalogue, find parts and enquire directly with our team."
+    />
+    <meta name="theme-color" content="#0b0c0e" />
+    <title>My account | AAMM — Alagar Automobiles</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("aamm_theme") === "light" ? "light" : "dark";
+      } catch (e) {}
+    </script>
+    <link rel="icon" href="images/logo.jpeg" type="image/jpeg" />
+    <meta property="og:site_name" content="AAMM — Alagar Automobiles" />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body data-page="account">
+    <a class="skip-link" href="#app">Skip to content</a>
+    <header id="siteHeader" class="site-header"></header>
+    <main id="app">
+      <div class="container loading" role="status">Loading AAMM…</div>
+    </main>
+    <footer id="siteFooter" class="site-footer"></footer>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </body>
 </html>

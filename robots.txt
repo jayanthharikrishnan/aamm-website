@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /cart.html
+Disallow: /track-order.html
+Disallow: /auth/
+Disallow: /admin/
+Disallow: /users/
+Disallow: /orders
+Sitemap: https://aamm-6rvg.onrender.com/sitemap.xml
