@@ -174,7 +174,7 @@ test('AAMM backend preserves the catalogue and enforces server-side access', { t
   });
 
   await t.test('checkout source, database, secrets and repository files cannot be downloaded', async () => {
-    for (const file of ['/database.db', '/server.js', '/package.json', '/.env', '/.git/config']) {
+    for (const file of ['/config/business.json','/lib/billing.js','/database.db', '/server.js', '/package.json', '/.env', '/.git/config']) {
       const { response } = await request(file);
       assert.ok([403, 404].includes(response.status), `${file} must not be exposed (received ${response.status})`);
     }
@@ -207,6 +207,26 @@ test('AAMM backend preserves the catalogue and enforces server-side access', { t
     const me = await client(server, adminCookie)('/auth/me');
     assert.equal(me.response.status, 200);
     assert.equal(JSON.stringify(me.data).includes(adminPassword), false);
+  });
+
+  await t.test('administrator ID login and setup status require real configured credentials', async () => {
+    const config=await request('/api/config');
+    assert.equal(config.data.admin.password_configured,true);
+    assert.equal(config.data.admin.otp_configured,false);
+    assert.equal(Object.hasOwn(config.data.admin,'id'),false,'The public setup flags do not disclose the administrator account');
+    const result=await request('/auth/admin-login',{method:'POST',body:{identifier:'9344898473',password:adminPassword}});
+    assert.equal(result.response.status,200,'The user-confirmed administrator ID supports the configured strong password');
+    assert.equal(result.data.isAdmin,true);
+    const admin=client(server,result.response.headers.get('set-cookie').split(';',1)[0]);
+    const setup=await admin('/admin/setup');
+    assert.equal(setup.response.status,200);
+    assert.equal(setup.data.billing.tax_invoice,false);
+    assert.equal(setup.data.services.otp.configured,false);
+    assert.ok(setup.data.services.otp.missing.includes('TWILIO_AUTH_TOKEN'));
+    assert.equal(JSON.stringify(setup.data).includes(adminPassword),false);
+    assert.equal((await request('/admin/setup')).response.status,401);
+    assert.equal((await request('/auth/admin-login',{method:'POST',body:{identifier:'wrong-admin',password:adminPassword}})).response.status,401);
+    assert.equal((await request('/auth/admin-otp/request',{method:'POST',body:{identifier:'9344898473'}})).response.status,503);
   });
 
   await t.test('spare-part and exchange requests validate, persist and remain admin-only', async () => {
@@ -375,6 +395,46 @@ test('AAMM backend preserves the catalogue and enforces server-side access', { t
     assert.ok(audit.data.some(row => row.entity === 'order' && String(row.entity_id) === String(orderEnquiry.id) && row.action === 'status_update'));
     const overview = await admin('/admin/overview');
     assert.equal(overview.data.verified_revenue, 0, 'Historical unverified sales cannot be counted as paid revenue');
+  });
+
+  await t.test('confirmation creates one immutable commercial invoice and guest printing needs the receipt secret', async () => {
+    const admin=client(server,adminCookie);
+    const productResult=await admin('/products',{method:'POST',body:{display_name:'Invoice <script>test</script> part',category:'Billing test',price:125,stock_quantity:10}});
+    const id=productResult.data.id;
+    assert.equal(productResult.response.status,201);
+    const created=await request('/orders',{method:'POST',body:{name:'Invoice <img src=x onerror=alert(1)> customer',phone:'9990000002',address:'Private invoice address',delivery:'Delivery',items:[{id,qty:2}],idempotency_key:'billing-test-order-0001'}});
+    assert.equal(created.response.status,201);
+    const order=created.data;
+    assert.match(order.reference,/^AA-/);
+    assert.equal((await request('/billing/guest',{method:'POST',body:{reference:order.reference,token:order.tracking_token,type:'invoice'}})).response.status,404);
+    assert.equal((await admin(`/admin/orders/${order.id}/invoice`,{method:'POST',body:{}})).response.status,409);
+    assert.equal((await admin(`/admin/orders/${order.id}`,{method:'PATCH',body:{status:'Order Confirmed'}})).response.status,409,'Unknown delivery charges must not become a fabricated zero');
+    assert.deepEqual(await databaseRows(copy,'SELECT status FROM orders WHERE id=?',[order.id]),[{status:'Enquiry submitted'}]);
+    const confirmed=await admin(`/admin/orders/${order.id}`,{method:'PATCH',body:{status:'Order Confirmed',delivery_charges:50}});
+    assert.equal(confirmed.response.status,200);
+    const bill=confirmed.data.invoice;
+    assert.equal(bill.kind,'invoice');assert.equal(bill.total,300);assert.match(bill.number,/^AA-INV-\d{4}-\d{6}$/);
+    const repeated=await admin(`/admin/orders/${order.id}/invoice`,{method:'POST',body:{}});
+    assert.equal(repeated.response.status,200);assert.equal(repeated.data.id,bill.id);
+    assert.deepEqual(await databaseRows(copy,'SELECT COUNT(*) AS count FROM billing_documents WHERE order_id=?',[order.id]),[{count:1}]);
+    assert.equal((await request(bill.print_url)).response.status,401);
+    const printed=await request('/billing/guest',{method:'POST',body:{reference:order.reference,token:order.tracking_token,type:'invoice'}});
+    assert.equal(printed.response.status,200);assert.equal(printed.response.headers.get('cache-control'),'no-store');
+    assert.match(printed.data,/Not a GST tax invoice/);assert.match(printed.data,/Commercial invoice/);
+    assert.equal(printed.data.includes('<script>test</script>'),false);assert.equal(printed.data.includes('<img src=x onerror=alert(1)>'),false);
+    assert.match(printed.data,/&lt;script&gt;test&lt;\/script&gt;/);
+    const metadata=await request('/tracking-guest',{method:'POST',body:{reference:order.reference,token:order.tracking_token}});
+    assert.equal(metadata.data.bills[0].id,bill.id);assert.equal(Object.hasOwn(metadata.data.bills[0],'snapshot'),false);
+    assert.equal((await request('/billing/guest',{method:'POST',body:{reference:order.reference,token:'0'.repeat(64),type:'invoice'}})).response.status,404);
+    assert.equal((await request('/billing/guest',{method:'POST',body:{reference:order.reference,token:order.tracking_token,type:'receipt'}})).response.status,404,'An unverified order has no payment receipt');
+    assert.equal((await admin(`/admin/orders/${order.id}`,{method:'PATCH',body:{status:'Order Confirmed',delivery_charges:75}})).response.status,409);
+    await admin(`/products/${id}`,{method:'PUT',body:{price:400}});
+    const unchanged=await admin(bill.print_url);assert.equal(unchanged.data,printed.data,'Later product edits must not change an issued invoice');
+    const next=await request('/orders',{method:'POST',body:{name:'Next invoice customer',phone:'9990000002',delivery:'pickup',items:[{id,qty:1}]}});
+    const nextConfirmation=await admin(`/admin/orders/${next.data.id}`,{method:'PATCH',body:{status:'Order Confirmed'}});
+    assert.equal(nextConfirmation.response.status,200);
+    assert.equal(Number(nextConfirmation.data.invoice.number.split('-').at(-1)),Number(bill.number.split('-').at(-1))+1,'Sequential numbering is allocated atomically');
+    await admin(`/products/${id}`,{method:'DELETE'});
   });
 
   await t.test('restart preserves existing IDs and newly submitted requests', async () => {
