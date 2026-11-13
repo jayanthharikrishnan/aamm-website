@@ -1,530 +1,458 @@
-const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
-const cors    = require("cors");
-const path    = require("path");
-const fs      = require("fs");
+'use strict';
+
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('node:path');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const providers = require('./lib/integrations');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname));
-
-const db = new sqlite3.Database("database.db");
-
-/* =====================================================================
-   SCHEMA
-===================================================================== */
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS products (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    name         TEXT,
-    display_name TEXT,
-    category     TEXT,
-    subcategory  TEXT,
-    vehicle      TEXT,
-    price        INTEGER,
-    description  TEXT
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS sales (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER,
-    qty        INTEGER DEFAULT 1,
-    sold_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    phone         TEXT UNIQUE,
-    name          TEXT,
-    address       TEXT,
-    delivery_pref TEXT,
-    email         TEXT,
-    profile_photo TEXT,
-    password      TEXT
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS orders (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    phone      TEXT,
-    items      TEXT,
-    total      INTEGER,
-    delivery   TEXT,
-    address    TEXT,
-    ordered_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  /* ── ALWAYS reseed so changes take effect ── */
-  db.run(`DELETE FROM products`, () => {
-
-    const products = [
-      // ── ALTERNATOR (DYNAMO) → STATOR
-      { display_name:"Mico Sumo Stator",              category:"Alternator (Dynamo)", subcategory:"Stator",              vehicle:"Mico Sumo",           price:700  },
-      { display_name:"Indigo Stator",                 category:"Alternator (Dynamo)", subcategory:"Stator",              vehicle:"Indigo",               price:925  },
-      { display_name:"Indica Stator",                 category:"Alternator (Dynamo)", subcategory:"Stator",              vehicle:"Indica",               price:925  },
-      { display_name:"Hino Stator",                   category:"Alternator (Dynamo)", subcategory:"Stator",              vehicle:"Hino",                 price:950  },
-      { display_name:"Scorpio Stator",                category:"Alternator (Dynamo)", subcategory:"Stator",              vehicle:"Scorpio",              price:950  },
-
-      // ── ALTERNATOR (DYNAMO) → ROTOR
-      { display_name:"Indica Rotor",                  category:"Alternator (Dynamo)", subcategory:"Rotor",               vehicle:"Indica",               price:1150 },
-      { display_name:"Indigo Rotor",                  category:"Alternator (Dynamo)", subcategory:"Rotor",               vehicle:"Indigo",               price:1150 },
-      { display_name:"Mico Sumo Rotor",               category:"Alternator (Dynamo)", subcategory:"Rotor",               vehicle:"Mico Sumo",            price:1000 },
-
-      // ── ALTERNATOR (DYNAMO) → PLATE
-      { display_name:"Ashok Leyland Lay Plate",       category:"Alternator (Dynamo)", subcategory:"Plate",               vehicle:"Ashok Leyland",        price:725  },
-      { display_name:"Tata 407 Plate",                category:"Alternator (Dynamo)", subcategory:"Plate",               vehicle:"Tata 407",             price:525  },
-      { display_name:"SG 124 Plate",                  category:"Alternator (Dynamo)", subcategory:"Plate",               vehicle:"SG 124",               price:575  },
-      { display_name:"Hino SE 118 Plate",             category:"Alternator (Dynamo)", subcategory:"Plate",               vehicle:"Hino",                 price:650  },
-
-      // ── ALTERNATOR (DYNAMO) → CUT OUT (REGULATOR)
-      { display_name:"TR 15 Tata 407 Cut Out",        category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Tata 407",             price:180  },
-      { display_name:"SR 30 Maruti Cut Out",          category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Maruti",               price:180  },
-      { display_name:"TC N/M Tata Ace Cut Out",       category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Tata Ace",             price:250  },
-      { display_name:"Mico 12V Cut Out",              category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Mico",                 price:260  },
-      { display_name:"SR 60 12V Cut Out",             category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"SR 60",                price:260  },
-      { display_name:"Tata Gold Cut Out",             category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Tata Gold",            price:650  },
-      { display_name:"Dost Cut Out",                  category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Dost",                 price:325  },
-      { display_name:"Maruti N/M 3 Pin Cut Out",      category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Maruti",               price:325  },
-      { display_name:"MIC 24V Cut Out",               category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"MIC",                  price:260  },
-      { display_name:"JCB Cut Out",                   category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"JCB",                  price:850  },
-      { display_name:"SR 60 24V Cut Out",             category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"SR 60",                price:260  },
-      { display_name:"SR 40 Ashok Leyland 24V Cut Out", category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Ashok Leyland",     price:180  },
-      { display_name:"Hino 24V Ashok Leyland Cut Out",category:"Alternator (Dynamo)", subcategory:"Cut Out (Regulator)", vehicle:"Hino",                 price:350  },
-
-      // ── ALTERNATOR (DYNAMO) → DYAD
-      { display_name:"Tata 407 Pick Up Dyad",         category:"Alternator (Dynamo)", subcategory:"Dyad",                vehicle:"Tata 407",             price:800  },
-      { display_name:"Mico Sumo Dyad",                category:"Alternator (Dynamo)", subcategory:"Dyad",                vehicle:"Mico Sumo",            price:425  },
-      { display_name:"Mico Scorpio Dyad",             category:"Alternator (Dynamo)", subcategory:"Dyad",                vehicle:"Scorpio",              price:480  },
-      { display_name:"Tata Ace Dyad",                 category:"Alternator (Dynamo)", subcategory:"Dyad",                vehicle:"Tata Ace",             price:325  },
-      { display_name:"Tata 407 Dyad",                 category:"Alternator (Dynamo)", subcategory:"Dyad",                vehicle:"Tata 407",             price:200  },
-
-      // ── ALTERNATOR (DYNAMO) → FAN
-      { display_name:"Ashok Leyland Fan",             category:"Alternator (Dynamo)", subcategory:"Fan",                 vehicle:"Ashok Leyland",        price:75   },
-      { display_name:"Tata 407 Fan",                  category:"Alternator (Dynamo)", subcategory:"Fan",                 vehicle:"Tata 407",             price:75   },
-      { display_name:"Hino Fan",                      category:"Alternator (Dynamo)", subcategory:"Fan",                 vehicle:"Hino",                 price:75   },
-
-      // ── ALTERNATOR (DYNAMO) → PULLEY
-      { display_name:"Hino TC Pulley",                category:"Alternator (Dynamo)", subcategory:"Pulley",              vehicle:"Hino",                 price:375  },
-      { display_name:"Tata 407 Big Pulley",           category:"Alternator (Dynamo)", subcategory:"Pulley",              vehicle:"Tata 407",             price:380  },
-      { display_name:"Tata 307 Pulley",               category:"Alternator (Dynamo)", subcategory:"Pulley",              vehicle:"Tata 307",             price:350  },
-
-      // ── ALTERNATOR (DYNAMO) → BRUSH
-      { display_name:"Tata 407 Dynamo Brush",         category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"Tata 407",             price:50   },
-      { display_name:"340 Dynamo Brush",              category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"340",                  price:50   },
-      { display_name:"SR 60 Sumo Dynamo Brush",       category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"Mico Sumo",            price:45   },
-      { display_name:"Tata AS Dynamo Brush",          category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"Tata",                 price:75   },
-      { display_name:"Mico 407 Dynamo Brush",         category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"Tata 407",             price:50   },
-      { display_name:"Maruti Dynamo Brush",           category:"Alternator (Dynamo)", subcategory:"Brush",               vehicle:"Maruti",               price:50   },
-
-      // ── ALTERNATOR (DYNAMO) → BRUSH HOLDER
-      { display_name:"Ashok Leyland Brush Holder",    category:"Alternator (Dynamo)", subcategory:"Brush Holder",        vehicle:"Ashok Leyland",        price:60   },
-      { display_name:"Maruti Brush Holder",           category:"Alternator (Dynamo)", subcategory:"Brush Holder",        vehicle:"Maruti",               price:60   },
-      { display_name:"Tata 407 Brush Holder",         category:"Alternator (Dynamo)", subcategory:"Brush Holder",        vehicle:"Tata 407",             price:60   },
-
-      // ── ALTERNATOR (DYNAMO) → OIL SEAL
-      { display_name:"TVS Oil Seal",                  category:"Alternator (Dynamo)", subcategory:"Oil Seal",            vehicle:"TVS",                  price:null },
-      { display_name:"Mico Oil Seal (OE)",            category:"Alternator (Dynamo)", subcategory:"Oil Seal",            vehicle:"Mico",                 price:100  },
-
-      // ── ALTERNATOR (DYNAMO) → HOUSING
-      { display_name:"Ashok Leyland Housing",         category:"Alternator (Dynamo)", subcategory:"Housing",             vehicle:"Ashok Leyland",        price:570  },
-      { display_name:"Ashok Leyland Hino SG 227 Housing", category:"Alternator (Dynamo)", subcategory:"Housing",         vehicle:"Hino",                 price:725  },
-
-      // ── SELF MOTOR → BUSH
-      { display_name:"Self Motor Bush 6219",          category:"Self Motor",          subcategory:"Bush",                vehicle:"Mico",                 price:25   },
-      { display_name:"Self Motor Bush 6220 Tata Ace", category:"Self Motor",          subcategory:"Bush",                vehicle:"Tata Ace",             price:25   },
-      { display_name:"Self Motor Bush 1208 Ape",      category:"Self Motor",          subcategory:"Bush",                vehicle:"Ape",                  price:30   },
-      { display_name:"Self Motor Bush 031",           category:"Self Motor",          subcategory:"Bush",                vehicle:"Various",              price:35   },
-      { display_name:"Self Motor Bush 430",           category:"Self Motor",          subcategory:"Bush",                vehicle:"Various",              price:25   },
-      { display_name:"Self Motor Bush 237 Tractor",   category:"Self Motor",          subcategory:"Bush",                vehicle:"Tractor",              price:35   },
-      { display_name:"Self Motor Bush 470",           category:"Self Motor",          subcategory:"Bush",                vehicle:"Various",              price:35   },
-      { display_name:"Self Motor Bush 471",           category:"Self Motor",          subcategory:"Bush",                vehicle:"Various",              price:35   },
-      { display_name:"Self Motor Bush 472 Tata 407",  category:"Self Motor",          subcategory:"Bush",                vehicle:"Tata 407",             price:35   },
-
-      // ── SELF MOTOR → BEN DEX
-      { display_name:"Self Ben Dex 8562",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 1170",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3620",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 9482",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 7341",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3397",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3082",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 7141",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 7140",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 2761",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3399",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3936",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 3078",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 0606 Dost", category:"Self Motor", subcategory:"Ben Dex", vehicle:"Dost", price:310 },
-      { display_name:"Self Ben Dex 8286",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 5671",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 517",    category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 349",    category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 724",    category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 780",    category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 6575",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 036 Ascot", category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:310 },
-      { display_name:"Self Ben Dex 4192",   category:"Self Motor", subcategory:"Ben Dex", vehicle:"Various", price:370 },
-
-      // ── SELF MOTOR → FORK AND BOLT
-      { display_name:"Inter Fork and Bolt",        category:"Self Motor", subcategory:"Fork and Bolt", vehicle:"Inter",    price:90 },
-      { display_name:"Tata 407 Fork and Bolt",     category:"Self Motor", subcategory:"Fork and Bolt", vehicle:"Tata 407", price:90 },
-      { display_name:"Ape Fork and Bolt",          category:"Self Motor", subcategory:"Fork and Bolt", vehicle:"Ape",      price:90 },
-      { display_name:"Ape T4 Fork and Bolt",       category:"Self Motor", subcategory:"Fork and Bolt", vehicle:"Ape T4",   price:90 },
-      { display_name:"Ape T5 Fork and Bolt",       category:"Self Motor", subcategory:"Fork and Bolt", vehicle:"Ape T5",   price:90 },
-
-      // ── SELF MOTOR → CENTER PLATE
-      { display_name:"Inter Center Plate",         category:"Self Motor", subcategory:"Center Plate", vehicle:"Inter",    price:160 },
-      { display_name:"Tata 407 Center Plate",      category:"Self Motor", subcategory:"Center Plate", vehicle:"Tata 407", price:160 },
-      { display_name:"608 Center Plate",           category:"Self Motor", subcategory:"Center Plate", vehicle:"608",      price:220 },
-      { display_name:"Auto Lek Center Plate",      category:"Self Motor", subcategory:"Center Plate", vehicle:"Auto Lek", price:160 },
-
-      // ── SELF MOTOR → COIL
-      { display_name:"Self Coil 1005",             category:"Self Motor", subcategory:"Coil", vehicle:"Various",  price:1400 },
-      { display_name:"Self Coil 1003",             category:"Self Motor", subcategory:"Coil", vehicle:"Various",  price:1000 },
-      { display_name:"Self Coil 1012",             category:"Self Motor", subcategory:"Coil", vehicle:"Various",  price:1000 },
-      { display_name:"Inter Self Coil",            category:"Self Motor", subcategory:"Coil", vehicle:"Inter",    price:900  },
-      { display_name:"Tata 407 Self Coil",         category:"Self Motor", subcategory:"Coil", vehicle:"Tata 407", price:900  },
-      { display_name:"Hino Field Coil",            category:"Self Motor", subcategory:"Coil", vehicle:"Hino",     price:1100 },
-
-      // ── SELF MOTOR → SELF BRUSH
-      { display_name:"1321 Tractor Self Brush",    category:"Self Motor", subcategory:"Self Brush", vehicle:"Tractor",        price:155 },
-      { display_name:"Inter N/M Self Brush",       category:"Self Motor", subcategory:"Self Brush", vehicle:"Inter",          price:225 },
-      { display_name:"Turbo Self Brush",           category:"Self Motor", subcategory:"Self Brush", vehicle:"Turbo",          price:245 },
-      { display_name:"TC 24V Self Brush",          category:"Self Motor", subcategory:"Self Brush", vehicle:"TC 24V",         price:250 },
-      { display_name:"644 Ashok Leyland Self Brush", category:"Self Motor", subcategory:"Self Brush", vehicle:"Ashok Leyland", price:210 },
-      { display_name:"Tata Ace Self Brush",        category:"Self Motor", subcategory:"Self Brush", vehicle:"Tata Ace",       price:85  },
-      { display_name:"Mico Inter Self Brush",      category:"Self Motor", subcategory:"Self Brush", vehicle:"Inter",          price:225 },
-
-      // ── SELF MOTOR → WIPER BRUSH ROCKER
-      { display_name:"Tata Ace Wiper Brush",       category:"Self Motor", subcategory:"Wiper Brush Rocker", vehicle:"Tata Ace", price:100 },
-      { display_name:"Maruti Wiper Brush",         category:"Self Motor", subcategory:"Wiper Brush Rocker", vehicle:"Maruti",   price:100 },
-      { display_name:"3 Pin Wiper Brush",          category:"Self Motor", subcategory:"Wiper Brush Rocker", vehicle:"Various",  price:100 },
-
-      // ── SELF MOTOR → ARMATURE
-      { display_name:"Mico Bolero Self Armature",     category:"Self Motor", subcategory:"Armature", vehicle:"Bolero",          price:1200 },
-      { display_name:"Indigo V2 Self Armature",       category:"Self Motor", subcategory:"Armature", vehicle:"Indigo",          price:1000 },
-      { display_name:"Indica Self Armature",          category:"Self Motor", subcategory:"Armature", vehicle:"Indica",          price:1000 },
-      { display_name:"Dost Self Armature",            category:"Self Motor", subcategory:"Armature", vehicle:"Dost",            price:1000 },
-      { display_name:"783 Self Armature",             category:"Self Motor", subcategory:"Armature", vehicle:"783",             price:1000 },
-      { display_name:"Mico Scorpio Self Armature",    category:"Self Motor", subcategory:"Armature", vehicle:"Scorpio",         price:1250 },
-      { display_name:"Tata Ace Self Armature",        category:"Self Motor", subcategory:"Armature", vehicle:"Tata Ace",        price:1000 },
-      { display_name:"Mahindra Glorio Self Armature", category:"Self Motor", subcategory:"Armature", vehicle:"Mahindra Glorio", price:1100 },
-
-      // ── SELF MOTOR → KATARO
-      { display_name:"Tractor Kataro",   category:"Self Motor", subcategory:"Kataro", vehicle:"Tractor",  price:190 },
-      { display_name:"Auto Lek Kataro",  category:"Self Motor", subcategory:"Kataro", vehicle:"Auto Lek", price:190 },
-      { display_name:"608 Kataro",       category:"Self Motor", subcategory:"Kataro", vehicle:"608",      price:260 },
-      { display_name:"Tata 407 Kataro",  category:"Self Motor", subcategory:"Kataro", vehicle:"Tata 407", price:260 },
-
-      // ── SELF MOTOR → SPINDLE
-      { display_name:"Tractor Spindle",  category:"Self Motor", subcategory:"Spindle", vehicle:"Tractor",  price:75 },
-      { display_name:"Tata 407 Spindle", category:"Self Motor", subcategory:"Spindle", vehicle:"Tata 407", price:75 },
-      { display_name:"608 Spindle",      category:"Self Motor", subcategory:"Spindle", vehicle:"608",      price:90 },
-
-      // ── SELF MOTOR → SOLENOID SWITCH
-      { display_name:"Tractor Solenoid Switch",            category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Tractor",       price:680 },
-      { display_name:"608 Solenoid Switch",                category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"608",           price:700 },
-      { display_name:"Mico Tractor Solenoid Switch",       category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Tractor",       price:700 },
-      { display_name:"TC 24V Solenoid Switch",             category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"TC 24V",        price:700 },
-      { display_name:"Mico 24 Solenoid Switch",            category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Mico",          price:700 },
-      { display_name:"Tata 407 Solenoid Switch",           category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Tata 407",      price:650 },
-      { display_name:"Tata 407 Auto Lek Solenoid Switch",  category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Tata 407",      price:690 },
-      { display_name:"Indica Solenoid Switch",             category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Indica",        price:590 },
-      { display_name:"Ape Solenoid Switch",                category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Ape",           price:590 },
-      { display_name:"Ape LD Solenoid Switch",             category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Ape",           price:590 },
-      { display_name:"Sonalika Solenoid Switch",           category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Sonalika",      price:850 },
-      { display_name:"Canter Solenoid Switch",             category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Canter",        price:980 },
-      { display_name:"Ashok Leyland 24V Solenoid Switch",  category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Ashok Leyland", price:700 },
-      { display_name:"Indigo V2 Solenoid Switch",          category:"Self Motor", subcategory:"Solenoid Switch", vehicle:"Indigo",        price:600 },
-
-      // ── SELF MOTOR → COPPER BOLT
-      { display_name:"Solenoid Switch Copper Bolt",                category:"Self Motor", subcategory:"Copper Bolt", vehicle:"Various",       price:null },
-      { display_name:"Ashok Leyland Main and Earth Copper Bolt",   category:"Self Motor", subcategory:"Copper Bolt", vehicle:"Ashok Leyland", price:null },
-    ];
-
-    const stmt = db.prepare(
-      `INSERT INTO products (name, display_name, category, subcategory, vehicle, price, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-
-    products.forEach(p => {
-      const name = p.display_name.toLowerCase();
-      const desc = `${p.subcategory} for ${p.vehicle}. Category: ${p.category}.`;
-      stmt.run(name, p.display_name, p.category, p.subcategory, p.vehicle, p.price || null, desc);
-    });
-
-    stmt.finalize(() => {
-      console.log(`✅ Seeded ${products.length} products.`);
-    });
-  });
-});
-
-/* =====================================================================
-   IMAGE FINDER — checks images/ folder for any extension
-===================================================================== */
-const IMG_EXTS = ["jpeg", "jpg", "png", "webp", "gif"];
-
-function findImage(displayName, category, subcategory, vehicle) {
-  const candidates = [
-    displayName.toLowerCase(),
-    `${vehicle} ${subcategory}`.toLowerCase(),
-    subcategory.toLowerCase(),
-  ];
-
-  const catFolder = category.toLowerCase().replace(/[()]/g, "").trim().replace(/\s+/g, " ");
-  const subFolder = subcategory.toLowerCase();
-
-  for (const candidate of candidates) {
-    for (const ext of IMG_EXTS) {
-      const paths = [
-        path.join(__dirname, "images", `${candidate}.${ext}`),
-        path.join(__dirname, "images", catFolder, `${candidate}.${ext}`),
-        path.join(__dirname, "images", catFolder, subFolder, `${candidate}.${ext}`),
-        path.join(__dirname, "images", "alternator dynamo", `${candidate}.${ext}`),
-        path.join(__dirname, "images", "starter motor", `${candidate}.${ext}`),
-      ];
-      for (const p of paths) {
-        if (fs.existsSync(p)) {
-          return p.replace(__dirname + path.sep, "").replace(/\\/g, "/");
-        }
-      }
-    }
-  }
-  return null;
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+const DB_PATH = path.resolve(process.env.DB_PATH || path.join(__dirname, 'database.db'));
+if (DB_PATH.startsWith(path.join(__dirname,'images') + path.sep)) throw new Error('DB_PATH must be outside the public images directory.');
+if (process.env.NODE_ENV === 'production' && (!process.env.DB_PATH || !path.isAbsolute(process.env.DB_PATH))) console.warn('AAMM persistence is not verified: configure an absolute DB_PATH on an attached persistent disk.');
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+// A new persistent volume receives the existing catalogue once. Never replace an existing DB.
+if (!fs.existsSync(DB_PATH) && DB_PATH !== path.join(__dirname, 'database.db') && fs.existsSync(path.join(__dirname, 'database.db'))) {
+  fs.copyFileSync(path.join(__dirname, 'database.db'), DB_PATH, fs.constants.COPYFILE_EXCL);
 }
-
-function attachImages(rows) {
-  return rows.map(r => ({
-    ...r,
-    image: findImage(r.display_name, r.category, r.subcategory, r.vehicle)
+const db = new sqlite3.Database(DB_PATH);
+const { AsyncLocalStorage } = require('node:async_hooks');
+const dbContext = new AsyncLocalStorage();
+let dbQueue = Promise.resolve();
+function schedule(operation) {
+  if (dbContext.getStore()) return operation();
+  const result = dbQueue.then(operation);
+  dbQueue = result.catch(() => {});
+  return result;
+}
+const runRaw = (sql, args = []) => new Promise((resolve, reject) => db.run(sql, args, function (err) { err ? reject(err) : resolve({ lastID: this.lastID, changes: this.changes }); }));
+const getRaw = (sql, args = []) => new Promise((resolve, reject) => db.get(sql, args, (err, row) => err ? reject(err) : resolve(row)));
+const allRaw = (sql, args = []) => new Promise((resolve, reject) => db.all(sql, args, (err, rows) => err ? reject(err) : resolve(rows)));
+const run = (sql, args = []) => schedule(() => runRaw(sql, args));
+const get = (sql, args = []) => schedule(() => getRaw(sql, args));
+const all = (sql, args = []) => schedule(() => allRaw(sql, args));
+function transaction(operation) {
+  return schedule(() => dbContext.run(true, async () => {
+    await runRaw('BEGIN IMMEDIATE');
+    try { const result = await operation(); await runRaw('COMMIT'); return result; }
+    catch (error) { await runRaw('ROLLBACK'); throw error; }
   }));
 }
+const fail = (status, message, code) => Object.assign(new Error(message), { status, code });
+const clean = (value, max = 1000) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+const phoneNumber = value => clean(String(value || ''), 20).replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
+const validPhone = value => /^[6-9]\d{9}$/.test(value);
+const business = {
+  name: 'AAMM — Alagar Automobiles',
+  whatsapp: process.env.WHATSAPP_NUMBER || '919344898473',
+  maps_url: process.env.GOOGLE_MAPS_URL || 'https://maps.app.goo.gl/2G5aei6qZseprHf38'
+};
 
-/* =====================================================================
-   FUZZY SEARCH HELPER
-===================================================================== */
-function fuzzyMatch(text, query) {
-  text  = text.toLowerCase();
-  query = query.toLowerCase().trim();
-
-  // Direct includes
-  if (text.includes(query)) return true;
-
-  // All words present
-  const words = query.split(/\s+/);
-  if (words.every(w => text.includes(w))) return true;
-
-  // Common aliases
-  const aliases = {
-    "ley": "ashok leyland", "leyland": "ashok leyland",
-    "maruthi": "maruti",    "maruti": "maruthi",
-    "bolero": "bolero",     "armature": "armature",
-    "starter": "self motor","dynamo": "alternator",
-    "alternator": "alternator", "self": "self motor",
-    "bendex": "ben dex",    "bendix": "ben dex",
-    "solenoid": "solenoid switch", "coil": "coil",
-    "bush": "bush",         "rotor": "rotor",
-    "stator": "stator",     "brush": "brush",
-    "pulley": "pulley",     "fan": "fan",
-    "housing": "housing",   "plate": "plate",
-    "regulator": "cut out", "cutout": "cut out",
-    "diode": "dyad",        "dyad": "dyad",
-    "spindle": "spindle",   "kataro": "kataro",
-    "407": "407",           "ace": "ace",
-    "indica": "indica",     "indigo": "indigo",
-    "scorpio": "scorpio",   "hino": "hino",
-    "inter": "inter",       "tractor": "tractor",
-  };
-
-  for (const [alias, expansion] of Object.entries(aliases)) {
-    if (query.includes(alias) && text.includes(expansion)) return true;
-    if (query.includes(expansion) && text.includes(alias)) return true;
+async function initialize() {
+  await run('PRAGMA foreign_keys = ON');
+  await run('PRAGMA busy_timeout = 5000');
+  const integrity = await get('PRAGMA integrity_check');
+  if (Object.values(integrity)[0] !== 'ok') throw new Error('Database integrity check failed; original data retained.');
+  const oldVersion = (await get('PRAGMA user_version')).user_version;
+  if (oldVersion < 2) {
+    const backupDir = path.join(path.dirname(DB_PATH), 'backups');
+    fs.mkdirSync(backupDir, { recursive: true });
+    const backupPath = path.join(backupDir, `aamm-before-v2-${Date.now()}.db`);
+    await run('VACUUM INTO ?', [backupPath]);
+    // VACUUM INTO produces a consistent snapshot before any migration.
   }
-
-  return false;
+  await run(`CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, display_name TEXT, category TEXT, subcategory TEXT, vehicle TEXT, price INTEGER, description TEXT)`);
+  await run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT UNIQUE,name TEXT,address TEXT,delivery_pref TEXT,email TEXT,profile_photo TEXT,password TEXT)`);
+  await run(`CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT,items TEXT,total INTEGER,delivery TEXT,address TEXT,ordered_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER,qty INTEGER DEFAULT 1,sold_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  const columns = async (table, additions) => {
+    const names = new Set((await all(`PRAGMA table_info(${table})`)).map(row => row.name));
+    for (const [name, type] of Object.entries(additions)) if (!names.has(name)) await run(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  };
+  await columns('products', { sku: 'TEXT', brand: 'TEXT', stock_quantity: 'INTEGER', archived: 'INTEGER NOT NULL DEFAULT 0', compatibility_verified: 'INTEGER NOT NULL DEFAULT 0', updated_at: 'TEXT' });
+  await columns('orders', { reference: 'TEXT', name: 'TEXT', status: "TEXT NOT NULL DEFAULT 'Legacy order — verification required'", payment_status: "TEXT NOT NULL DEFAULT 'unverified'", idempotency_key: 'TEXT', courier: 'TEXT', tracking_number: 'TEXT', estimated_delivery: 'TEXT', payment_order_id: 'TEXT', tracking_token_hash: 'TEXT' });
+  await run(`CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,phone TEXT NOT NULL,role TEXT NOT NULL,expires_at INTEGER NOT NULL)`);
+  await run(`CREATE TABLE IF NOT EXISTS enquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, reference TEXT UNIQUE,name TEXT NOT NULL,phone TEXT NOT NULL,part_name TEXT NOT NULL,vehicle TEXT,message TEXT,status TEXT NOT NULL DEFAULT 'New',notes TEXT,quotation_amount REAL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT)`);
+  await run(`CREATE TABLE IF NOT EXISTS exchange_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, reference TEXT UNIQUE,name TEXT NOT NULL,phone TEXT NOT NULL,part_name TEXT NOT NULL,vehicle TEXT,condition TEXT,message TEXT,status TEXT NOT NULL DEFAULT 'New',notes TEXT,valuation REAL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT)`);
+  await run(`CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT,actor TEXT NOT NULL,action TEXT NOT NULL,entity TEXT,entity_id TEXT,details TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE IF NOT EXISTS order_status_history (id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER NOT NULL,previous_status TEXT,status TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,phone TEXT NOT NULL,title TEXT NOT NULL,message TEXT,reference TEXT,is_read INTEGER NOT NULL DEFAULT 0,delivery_status TEXT NOT NULL DEFAULT 'in_app',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER NOT NULL,provider_order_id TEXT UNIQUE,provider_payment_id TEXT UNIQUE,amount INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'created',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE IF NOT EXISTS stock_movements (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_quantity INTEGER,new_quantity INTEGER,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL');
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_reference ON orders(reference) WHERE reference IS NOT NULL');
+  await run('CREATE INDEX IF NOT EXISTS products_category ON products(category,subcategory)');
+  await run('CREATE INDEX IF NOT EXISTS orders_phone ON orders(phone)');
+  await run('CREATE INDEX IF NOT EXISTS enquiries_status ON enquiries(status)');
+  await run('CREATE INDEX IF NOT EXISTS exchanges_status ON exchange_requests(status)');
+  await run('CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at)');
+  await run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]);
+  await run('PRAGMA user_version = 2');
 }
 
-/* =====================================================================
-   API — PRODUCTS
-===================================================================== */
-app.get("/products", (req, res) => {
-  const { category, subcategory, vehicle, search } = req.query;
-
-  let sql    = "SELECT * FROM products WHERE 1=1";
-  const params = [];
-
-  if (category)    { sql += " AND category=?";    params.push(category); }
-  if (subcategory) { sql += " AND subcategory=?"; params.push(subcategory); }
-  if (vehicle)     { sql += " AND vehicle=?";     params.push(vehicle); }
-
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    // Fuzzy search in JS after SQL filter
-    if (search && search.trim()) {
-      const q = search.trim();
-      rows = rows.filter(r =>
-        fuzzyMatch(r.display_name, q) ||
-        fuzzyMatch(r.vehicle,       q) ||
-        fuzzyMatch(r.subcategory,   q) ||
-        fuzzyMatch(r.category,      q) ||
-        fuzzyMatch(r.description||"", q)
-      );
-    }
-
-    res.json(attachImages(rows));
-  });
-});
-
-app.get("/products/categories", (req, res) => {
-  db.all("SELECT DISTINCT category FROM products ORDER BY category", (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows.map(r => r.category));
-  });
-});
-
-app.get("/products/subcategories", (req, res) => {
-  const { category } = req.query;
-  let sql = "SELECT DISTINCT subcategory FROM products";
-  const params = [];
-  if (category) { sql += " WHERE category=?"; params.push(category); }
-  sql += " ORDER BY subcategory";
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows.map(r => r.subcategory));
-  });
-});
-
-app.get("/products/vehicles", (req, res) => {
-  const { category, subcategory } = req.query;
-  let sql = "SELECT DISTINCT vehicle FROM products WHERE 1=1";
-  const params = [];
-  if (category)    { sql += " AND category=?";    params.push(category); }
-  if (subcategory) { sql += " AND subcategory=?"; params.push(subcategory); }
-  sql += " ORDER BY vehicle";
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows.map(r => r.vehicle));
-  });
-});
-
-app.get("/products/top-selling", (req, res) => {
-  // Curated top sellers until real sales accumulate
-  const TOP_IDS = [1, 6, 13, 26, 31, 86, 99, 107, 110, 115];
-  db.all(
-    `SELECT p.*, COALESCE(SUM(s.qty),0) as total_sold
-     FROM products p LEFT JOIN sales s ON s.product_id = p.id
-     GROUP BY p.id ORDER BY total_sold DESC, p.id ASC LIMIT 10`,
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      // If no real sales yet, use curated list
-      const hasRealSales = rows.some(r => r.total_sold > 0);
-      if (hasRealSales) return res.json(attachImages(rows));
-
-      db.all(
-        `SELECT * FROM products WHERE id IN (${TOP_IDS.join(",")}) LIMIT 10`,
-        (err2, r2) => {
-          if (err2 || !r2.length) return res.json(attachImages(rows.slice(0, 10)));
-          res.json(attachImages(r2));
-        }
-      );
-    }
-  );
-});
-
-app.post("/products", (req, res) => {
-  const { display_name, category, subcategory, vehicle, price, description } = req.body;
-  db.run(
-    `INSERT INTO products (name,display_name,category,subcategory,vehicle,price,description)
-     VALUES (?,?,?,?,?,?,?)`,
-    [(display_name||"").toLowerCase(), display_name, category||"", subcategory||"", vehicle||"", price||null, description||""],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID });
-    }
-  );
-});
-
-/* =====================================================================
-   API — SALES
-===================================================================== */
-app.post("/sales", (req, res) => {
-  const { product_id, qty } = req.body;
-  db.run("INSERT INTO sales (product_id, qty) VALUES (?,?)", [product_id, qty||1], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ ok: true });
-  });
-});
-
-/* =====================================================================
-   API — AUTH
-===================================================================== */
-app.post("/auth/login", (req, res) => {
-  const { phone, password } = req.body;
-  if (!phone) return res.status(400).json({ error: "Phone required" });
-
-  if (phone === "9344898473") {
-    if (password !== "12345678") return res.status(401).json({ error: "Wrong password" });
-    db.get("SELECT * FROM users WHERE phone=?", [phone], (err, user) => {
-      if (user) return res.json({ user, isAdmin: true });
-      db.run("INSERT INTO users (phone, name) VALUES (?,?)", [phone, "Admin"], function() {
-        db.get("SELECT * FROM users WHERE phone=?", [phone], (e, u) => res.json({ user: u, isAdmin: true }));
-      });
-    });
-    return;
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.razorpay.com; frame-src https://api.razorpay.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'");
+  if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  if (req.path.startsWith('/admin/') || req.path.startsWith('/auth/') || req.path.startsWith('/users/') || req.path.startsWith('/orders') || req.path.startsWith('/tracking') || req.path.startsWith('/notifications') || req.path.startsWith('/my/')) res.setHeader('Cache-Control', 'no-store');
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origin = req.get('origin');
+    const allowedOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
+    if ((origin && origin !== allowedOrigin) || req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ error: 'Cross-site requests are not allowed.' });
   }
-
-  db.get("SELECT * FROM users WHERE phone=?", [phone], (err, user) => {
-    if (user) return res.json({ user, isAdmin: false });
-    db.run("INSERT INTO users (phone) VALUES (?)", [phone], function() {
-      db.get("SELECT * FROM users WHERE phone=?", [phone], (e, u) => res.json({ user: u, isAdmin: false }));
-    });
-  });
+  next();
 });
+app.use(express.json({ limit: '64kb', verify: (req, res, buffer) => { req.rawBody = buffer; } }));
+app.use((req,res,next) => { if (!req.body) req.body = {}; next(); });
 
-app.put("/users/:phone", (req, res) => {
-  const { name, address, delivery_pref, email } = req.body;
-  db.run(
-    "UPDATE users SET name=?, address=?, delivery_pref=?, email=? WHERE phone=?",
-    [name, address, delivery_pref, email, req.params.phone],
-    err => { if (err) return res.status(500).json({ error: err.message }); res.json({ ok: true }); }
-  );
-});
-
-app.get("/users/:phone", (req, res) => {
-  db.get("SELECT * FROM users WHERE phone=?", [req.params.phone], (err, user) => {
-    if (!user) return res.status(404).json({ error: "Not found" });
-    res.json(user);
-  });
-});
-
-/* =====================================================================
-   API — ORDERS
-===================================================================== */
-app.post("/orders", (req, res) => {
-  const { phone, items, total, delivery, address } = req.body;
-  db.run(
-    "INSERT INTO orders (phone,items,total,delivery,address) VALUES (?,?,?,?,?)",
-    [phone, JSON.stringify(items), total, delivery, address],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      (items||[]).forEach(item => {
-        db.run("INSERT INTO sales (product_id,qty) VALUES (?,?)", [item.id, item.qty||1]);
-      });
-      res.json({ id: this.lastID });
+const limits = new Map();
+function rateLimit(scope, count, windowMs) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${scope}:${req.ip}`;
+    let item = limits.get(key);
+    if (!item || item.expires < now) item = { count: 0, expires: now + windowMs };
+    item.count += 1; limits.set(key, item);
+    if (limits.size > 10000) for (const [k, v] of limits) if (v.expires < now) limits.delete(k);
+    if (item.count > count) { res.setHeader('Retry-After', Math.ceil((item.expires - now) / 1000)); return res.status(429).json({ error: 'Too many requests. Please try again later.' }); }
+    next();
+  };
+}
+app.use('/auth', rateLimit('auth', 30, 15 * 60 * 1000));
+const submissionLimit = rateLimit('submission', 40, 15 * 60 * 1000);
+const hashToken = value => crypto.createHash('sha256').update(value).digest('hex');
+app.use(async (req, res, next) => {
+  try {
+    const cookie = (req.headers.cookie || '').split(';').map(v => v.trim()).find(v => v.startsWith('aamm_session='));
+    if (cookie) {
+      const token = cookie.slice('aamm_session='.length);
+      if (/^[a-f0-9]{64}$/.test(token)) req.session = await get('SELECT phone,role FROM sessions WHERE token_hash=? AND expires_at>?', [hashToken(token), Date.now()]);
     }
-  );
+    next();
+  } catch (err) { next(err); }
+});
+const admin = (req, res, next) => req.session?.role === 'admin' ? next() : res.status(401).json({ error: 'Administrator sign-in required.' });
+const customer = (req, res, next) => req.session ? next() : res.status(401).json({ error: 'Sign in to access your account.' });
+async function createSession(req, res, phone, role) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await run('INSERT INTO sessions(token_hash,phone,role,expires_at) VALUES (?,?,?,?)', [hashToken(token), phone, role, Date.now() + 8 * 60 * 60 * 1000]);
+  res.cookie('aamm_session', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000, path: '/' });
+}
+const publicUser = u => u && ({ id: u.id, phone: u.phone, name: u.name, address: u.address, email: u.email, delivery_pref: u.delivery_pref });
+const audit = (req, action, entity, id, details = {}) => run('INSERT INTO audit_logs(actor,action,entity,entity_id,details) VALUES (?,?,?,?,?)', [req.session?.phone || 'system', action, entity, String(id ?? ''), JSON.stringify(details)]);
+const notify = (phone, title, message, reference) => run('INSERT INTO notifications(phone,title,message,reference) VALUES (?,?,?,?)', [phone, title, message, reference]);
+const productRow = row => ({ ...row, image: null, availability: row.stock_quantity == null ? 'Confirm availability' : row.stock_quantity > 0 ? 'In stock' : 'Out of stock', compatibility_status: row.compatibility_verified ? 'verified' : 'unverified' });
+
+function normalizeSearch(value) {
+  return clean(value, 200).toLowerCase().replace(/\b(starter|self)\b/g, 'self motor').replace(/\bdynamo\b/g, 'alternator').replace(/\bmaruthi\b/g, 'maruti').replace(/\b(bendix|bendex)\b/g, 'ben dex').replace(/\bregulator\b/g, 'cut out').replace(/\bdiode\b/g, 'dyad').replace(/\s+/g, ' ').trim();
+}
+// At most one insertion, removal or substitution. Numeric SKUs and short
+// words retain their existing exact/substring behavior and never use fuzziness.
+function oneEditApart(left, right) {
+  if (Math.abs(left.length-right.length)>1) return false;
+  let a=0,b=0,edits=0;
+  while(a<left.length && b<right.length) {
+    if(left[a]===right[b]) { a++; b++; continue; }
+    if(++edits>1) return false;
+    if(left.length>=right.length) a++;
+    if(right.length>=left.length) b++;
+  }
+  return edits + (a<left.length || b<right.length ? 1 : 0) <= 1;
+}
+async function searchProducts(query = {}) {
+  let sql = 'SELECT * FROM products WHERE archived=0'; const params = [];
+  for (const key of ['category', 'subcategory', 'vehicle', 'brand']) if (clean(query[key])) { sql += ` AND ${key}=?`; params.push(clean(query[key], 200)); }
+  if (query.min_price !== undefined && Number.isFinite(Number(query.min_price))) { sql += ' AND price>=?'; params.push(Number(query.min_price)); }
+  if (query.max_price !== undefined && Number.isFinite(Number(query.max_price))) { sql += ' AND price<=?'; params.push(Number(query.max_price)); }
+  if (query.availability === 'in_stock') sql += ' AND stock_quantity>0';
+  if (query.availability === 'out_of_stock') sql += ' AND stock_quantity=0';
+  if (query.availability === 'unknown') sql += ' AND stock_quantity IS NULL';
+  let rows = await all(sql + ' ORDER BY id', params);
+  const search = normalizeSearch(query.search || query.q || '');
+  if (search) {
+    const words = [...new Set(search.split(' ').filter(Boolean))];
+    rows = rows.filter(row => {
+      const text = normalizeSearch([row.display_name, row.name, row.category, row.subcategory, row.vehicle, row.sku, row.brand, row.description].filter(Boolean).join(' '));
+      const tokens = text.split(/[^a-z0-9]+/).filter(Boolean);
+      return words.every(word => text.includes(word) || (word.length>=4 && /^[a-z]+$/.test(word) && tokens.some(token => /^[a-z]+$/.test(token) && oneEditApart(word,token))));
+    });
+  }
+  if (query.sort === 'price_asc') rows.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+  if (query.sort === 'price_desc') rows.sort((a, b) => (b.price ?? -1) - (a.price ?? -1));
+  if (query.sort === 'name') rows.sort((a, b) => a.display_name.localeCompare(b.display_name));
+  return rows.map(productRow);
+}
+
+app.get('/health', async (req, res) => { await get('SELECT 1'); res.json({ status: 'ok', database: 'ready', persistence_configuration: process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH) ? 'explicit_path_configured' : 'not_verified' }); });
+app.get('/api/config', (req, res) => res.json({ business, features: { otp: providers.otpConfigured(), payments: providers.paymentsConfigured(), ai: providers.aiConfigured(), image_uploads: false }, integration_status: { otp: providers.otpConfigured() ? 'configured' : 'not_configured', payments: providers.paymentsConfigured() ? 'configured' : 'not_configured', ai: providers.aiConfigured() ? 'configured' : 'not_configured', image_uploads: 'not_configured', courier: 'internal_status_updates', notifications: 'in_app_only' } }));
+app.get('/products', async (req, res) => res.json(await searchProducts(req.query)));
+app.get('/products/categories', async (req, res) => res.json((await all('SELECT DISTINCT category FROM products WHERE archived=0 AND category IS NOT NULL ORDER BY category')).map(r => r.category)));
+app.get('/products/subcategories', async (req, res) => res.json((await all('SELECT DISTINCT subcategory FROM products WHERE archived=0' + (req.query.category ? ' AND category=?' : '') + ' ORDER BY subcategory', req.query.category ? [clean(req.query.category, 200)] : [])).map(r => r.subcategory)));
+app.get('/products/vehicles', async (req, res) => { let sql = 'SELECT DISTINCT vehicle FROM products WHERE archived=0 AND vehicle IS NOT NULL AND vehicle NOT IN (\'\',\'Various\')'; const args = []; for (const field of ['category', 'subcategory']) if (req.query[field]) { sql += ` AND ${field}=?`; args.push(clean(req.query[field], 200)); } res.json((await all(sql + ' ORDER BY vehicle', args)).map(r => r.vehicle)); });
+app.get('/products/brands', async (req, res) => res.json((await all("SELECT DISTINCT brand FROM products WHERE archived=0 AND brand IS NOT NULL AND brand!='' ORDER BY brand")).map(r => r.brand)));
+app.get('/products/top-selling', async (req, res) => {
+  // Historical sales cannot be treated as verified payments; show curated catalogue picks.
+  res.json((await all('SELECT * FROM products WHERE archived=0 ORDER BY id LIMIT 8')).map(r => ({ ...productRow(r), featured: true })));
+});
+app.get('/products/:id', async (req, res) => { const row = await get('SELECT * FROM products WHERE id=? AND archived=0', [req.params.id]); if (!row) throw fail(404, 'Product not found.'); res.json(productRow(row)); });
+
+app.post('/auth/admin-login', async (req, res) => {
+  if (!process.env.ADMIN_PHONE || !process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 12) throw fail(503, 'Administrator sign-in has not been configured.');
+  const phone = phoneNumber(req.body.phone); const password = typeof req.body.password === 'string' ? req.body.password : '';
+  const actual = crypto.scryptSync(password.slice(0, 512), 'aamm-admin-credential', 32);
+  const expected = crypto.scryptSync(process.env.ADMIN_PASSWORD, 'aamm-admin-credential', 32);
+  if (phone !== phoneNumber(process.env.ADMIN_PHONE) || !crypto.timingSafeEqual(actual, expected)) throw fail(401, 'Invalid administrator credentials.');
+  await createSession(req, res, phone, 'admin');
+  await audit({ session: { phone } }, 'login', 'administrator', phone);
+  res.json({ user: { phone, name: 'Administrator' }, isAdmin: true });
+});
+const otpRequests = new Map();
+async function requestOtp(req, res) {
+  const phone = phoneNumber(req.body.phone); if (!validPhone(phone)) throw fail(400, 'Enter a valid Indian mobile number.');
+  if (!providers.otpConfigured()) throw fail(503, 'Phone sign-in is unavailable until the SMS verification service is configured.', 'otp_not_configured');
+  const last = otpRequests.get(phone) || 0;
+  if (Date.now() - last < 60000) { res.setHeader('Retry-After', Math.ceil((60000 - Date.now() + last) / 1000)); throw fail(429, 'Please wait 60 seconds before requesting another code.'); }
+  otpRequests.set(phone, Date.now());
+  if (otpRequests.size > 10000) for (const [key,time] of otpRequests) if (Date.now()-time > 60000) otpRequests.delete(key);
+  try { await providers.sendOtp(phone); } catch(error) { otpRequests.delete(phone); throw error; }
+  res.json({ status: 'pending', resend_after: 60 });
+}
+app.post('/auth/login', requestOtp);
+app.post('/auth/otp/request', requestOtp);
+app.post('/auth/otp/verify', async (req, res) => {
+  const phone = phoneNumber(req.body.phone); const code = clean(req.body.code, 10);
+  if (!validPhone(phone) || !/^\d{4,8}$/.test(code)) throw fail(400, 'Enter a valid phone number and verification code.');
+  if (!providers.otpConfigured()) throw fail(503, 'Phone verification is not configured.');
+  if (!await providers.verifyOtp(phone, code)) throw fail(401, 'The code is invalid or has expired.');
+  await run('INSERT INTO users(phone) VALUES (?) ON CONFLICT(phone) DO NOTHING', [phone]);
+  await createSession(req, res, phone, 'customer');
+  res.json({ user: publicUser(await get('SELECT * FROM users WHERE phone=?', [phone])), isAdmin: false });
+});
+app.get('/auth/me', customer, async (req, res) => res.json({ user: req.session.role === 'admin' ? { phone: req.session.phone, name: 'Administrator' } : publicUser(await get('SELECT * FROM users WHERE phone=?', [req.session.phone])), isAdmin: req.session.role === 'admin' }));
+app.post('/auth/logout', async (req, res) => { const cookie = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('aamm_session=')); if (cookie) await run('DELETE FROM sessions WHERE token_hash=?', [hashToken(cookie.slice(13))]); res.clearCookie('aamm_session', { path: '/' }); res.json({ ok: true }); });
+app.get('/users/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can access only your own profile.'); const user = await get('SELECT * FROM users WHERE phone=?', [phone]); if (!user) throw fail(404, 'Profile not found.'); res.json(publicUser(user)); });
+app.put('/users/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can edit only your own profile.'); await run('UPDATE users SET name=?,address=?,delivery_pref=?,email=? WHERE phone=?', [clean(req.body.name, 100), clean(req.body.address, 1000), clean(req.body.delivery_pref, 50), clean(req.body.email, 200), phone]); res.json({ ok: true }); });
+
+async function validateCart(items) {
+  if (!Array.isArray(items) || !items.length || items.length > 100) throw fail(400, 'Add at least one product, up to 100 products.');
+  const quantities = new Map();
+  for (const item of items) {
+    const id = Number(item.id); const qty = Number(item.qty ?? item.quantity ?? 1);
+    if (!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(qty) || qty < 1 || qty > 100) throw fail(400, 'Product quantities must be whole numbers between 1 and 100.');
+    quantities.set(id, (quantities.get(id) || 0) + qty);
+    if (quantities.get(id) > 100) throw fail(400, 'A maximum of 100 units per product is allowed.');
+  }
+  const verified = []; let total = 0;
+  for (const [id, qty] of quantities) {
+    const p = await get('SELECT * FROM products WHERE id=? AND archived=0', [id]);
+    if (!p) throw fail(400, 'A product is no longer available in the catalogue.');
+    if (!Number.isFinite(p.price) || p.price < 0) throw fail(400, `Please request a quotation for ${p.display_name}.`);
+    if (p.stock_quantity !== null && p.stock_quantity < qty) throw fail(409, `Insufficient stock for ${p.display_name}.`);
+    verified.push({ id, qty, display_name: p.display_name, name: p.display_name, sku: p.sku, brand: p.brand, price: p.price }); total += p.price * qty;
+  }
+  if (!Number.isSafeInteger(total * 100)) throw fail(400, 'Order total exceeds the supported amount.');
+  return { items: verified, total };
+}
+function orderResponse(order) {
+  const items = typeof order.items === 'string' ? JSON.parse(order.items || '[]') : order.items;
+  const message = [`AAMM order enquiry ${order.reference}`, `Name: ${order.name}`, `Phone: ${order.phone}`, `Delivery: ${order.delivery}`, `Address: ${order.address || 'Store pickup'}`, '', ...items.map(i => `${i.display_name} | Part: ${i.sku || 'Not listed'} | Brand: ${i.brand || 'Confirm with AAMM'} | ${i.qty} × ₹${i.price} = ₹${i.qty * i.price}`), '', `Subtotal: ₹${order.total}`, 'Delivery charges: to be confirmed', `Catalogue subtotal: ₹${order.total}`, 'Please confirm availability, delivery charges and final total. This is an enquiry, not a confirmed order.'].join('\n');
+  return { id: order.id, reference: order.reference, status: order.status, payment_status: order.payment_status, total: order.total, subtotal: order.total, delivery_charges: null, items, whatsapp_url: `https://wa.me/${business.whatsapp}?text=${encodeURIComponent(message)}` };
+}
+app.post('/orders', submissionLimit, async (req, res) => { const response = await transaction(async () => {
+  const phone = phoneNumber(req.body.phone); const name = clean(req.body.name, 100); const address = clean(req.body.address, 1000); const delivery = clean(req.body.delivery, 100) || 'Store pickup';
+  if (!validPhone(phone) || !name) throw fail(400, 'A name and valid Indian mobile number are required.');
+  if (!/pickup|collect/i.test(delivery) && !address) throw fail(400, 'Enter your delivery address.');
+  const key = clean(req.body.idempotency_key, 100);
+  if (key && !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw fail(400, 'Invalid order request identifier.');
+  if (key) { const previous = await get('SELECT * FROM orders WHERE idempotency_key=?', [key]); if (previous) { if (previous.phone !== phone) throw fail(409, 'This request identifier is already in use.'); return { status: 200, data: orderResponse(previous) }; } }
+  const cart = await validateCart(req.body.items); const reference = `AAMM-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+  const trackingToken = crypto.randomBytes(32).toString('hex');
+  const result = await run('INSERT INTO orders(phone,name,items,total,delivery,address,reference,status,payment_status,idempotency_key,tracking_token_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [phone, name, JSON.stringify(cart.items), cart.total, delivery, address, reference, 'Enquiry submitted', 'not_requested', key || null, hashToken(trackingToken)]);
+  await run('INSERT INTO order_status_history(order_id,status,actor) VALUES (?,?,?)', [result.lastID, 'Enquiry submitted', 'customer enquiry']);
+  await notify(phone, 'Order enquiry received', 'AAMM will confirm availability and the final total.', reference);
+  return { status: 201, data: { ...orderResponse(await get('SELECT * FROM orders WHERE id=?', [result.lastID])), tracking_token: trackingToken } };
+}); res.status(response.status).json(response.data); });
+app.get('/orders/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can access only your own orders.'); res.json((await all('SELECT * FROM orders WHERE phone=? ORDER BY ordered_at DESC', [phone])).map(o => { const { tracking_token_hash,...safe }=o; return { ...safe, items: JSON.parse(o.items || '[]') }; })); });
+// A guest needs both the reference and the unguessable receipt secret. The
+// secret is issued once, stored only as a hash, and never placed in a URL.
+app.post('/tracking-guest', rateLimit('guest-tracking', 30, 15 * 60 * 1000), async (req,res) => {
+  const reference = clean(req.body.reference,100); const token = clean(req.body.token,100);
+  if (!reference || !/^[a-f0-9]{64}$/.test(token)) throw fail(400,'Enter your order reference and tracking token from your receipt.');
+  const order = await get('SELECT * FROM orders WHERE reference=?',[reference]);
+  const expected = order?.tracking_token_hash && /^[a-f0-9]{64}$/.test(order.tracking_token_hash) ? Buffer.from(order.tracking_token_hash,'hex') : Buffer.alloc(32);
+  const actual = Buffer.from(hashToken(token),'hex');
+  if (!crypto.timingSafeEqual(actual,expected) || !order?.tracking_token_hash) throw fail(404,'No order matches that reference and tracking token.');
+  const items = JSON.parse(order.items || '[]').map(item => ({ id:item.id,display_name:item.display_name || item.name,qty:item.qty,price:item.price,sku:item.sku || null,brand:item.brand || null }));
+  res.setHeader('Cache-Control','no-store');
+  res.json({ id:order.id,reference:order.reference,status:order.status,payment_status:order.payment_status,total:order.total,items,ordered_at:order.ordered_at,courier:order.courier,tracking_number:order.tracking_number,estimated_delivery:order.estimated_delivery,tracking_type:'internal',history:await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id',[order.id]) });
+});
+app.post('/tracking', customer, async (req, res) => { const order = await get('SELECT * FROM orders WHERE reference=?', [clean(req.body.reference, 100)]); if (!order || (req.session.role !== 'admin' && order.phone !== req.session.phone)) throw fail(404, 'Order not found in your account.'); res.json({ ...orderResponse(order), courier: order.courier, tracking_number: order.tracking_number, estimated_delivery: order.estimated_delivery, tracking_type: 'internal', history: await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [order.id]) }); });
+
+async function submitRequest(req, res, table, prefix) {
+  const name = clean(req.body.name, 100); const phone = phoneNumber(req.body.phone); const part = clean(req.body.part_name || req.body.part || req.body.partName, 200);
+  if (!name || !validPhone(phone) || !part) throw fail(400, 'Your name, valid phone number and spare-part name are required.');
+  const reference = `${prefix}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+  const columns = ['reference','name','phone','part_name','vehicle','message']; const values = [reference,name,phone,part,clean(req.body.vehicle, 200),clean(req.body.message || req.body.description, 2000)];
+  if (table === 'exchange_requests') { columns.push('condition'); values.push(clean(req.body.condition, 500)); }
+  const result = await run(`INSERT INTO ${table}(${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`, values);
+  await notify(phone, prefix === 'ENQ' ? 'Spare-part request received' : 'Exchange request received', 'AAMM will review your request and contact you.', reference);
+  res.status(201).json({ id: result.lastID, reference, status: 'New' });
+}
+app.post('/enquiries', submissionLimit, (req, res) => submitRequest(req, res, 'enquiries', 'ENQ'));
+app.post('/exchange-requests', submissionLimit, (req, res) => submitRequest(req, res, 'exchange_requests', 'EXC'));
+app.get('/my/requests', customer, async (req,res) => res.json({
+  enquiries: await all('SELECT id,reference,part_name,vehicle,status,quotation_amount,created_at,updated_at FROM enquiries WHERE phone=? ORDER BY id DESC LIMIT 100',[req.session.phone]),
+  exchanges: await all('SELECT id,reference,part_name,vehicle,condition,status,valuation,created_at,updated_at FROM exchange_requests WHERE phone=? ORDER BY id DESC LIMIT 100',[req.session.phone])
+}));
+app.get('/notifications', customer, async (req, res) => res.json(await all('SELECT * FROM notifications WHERE phone=? ORDER BY id DESC LIMIT 100', [req.session.phone])));
+app.patch('/notifications/:id', customer, async (req, res) => { await run('UPDATE notifications SET is_read=1 WHERE id=? AND phone=?', [req.params.id, req.session.phone]); res.json({ ok: true }); });
+
+app.post('/assistant', rateLimit('assistant', 30, 15 * 60 * 1000), async (req, res) => {
+  const question = clean(req.body.message || req.body.question, 1000); if (!question) throw fail(400, 'Enter a question about spare parts.');
+  let products = await searchProducts({ search: question });
+  if (!products.length) { const words = normalizeSearch(question).split(' ').filter(w => w.length > 2); const catalogue = await searchProducts(); products = catalogue.map(p => ({ p, score: words.filter(w => normalizeSearch([p.display_name,p.subcategory,p.vehicle,p.category].join(' ')).includes(w)).length })).filter(r => r.score > 0).sort((a,b) => b.score-a.score).slice(0,5).map(r => r.p); }
+  products = products.slice(0, 6);
+  if (!providers.aiConfigured()) return res.json({ mode: 'catalogue_search', message: products.length ? 'These are matches from the AAMM catalogue. Please contact AAMM to confirm compatibility and availability.' : 'No matching part was found in the current catalogue. Send a spare-part request and AAMM can help. AI responses are not configured.', products });
+  res.json({ mode: 'ai', message: await providers.answerCatalogue(question, products, Array.isArray(req.body.history) ? req.body.history.slice(-6) : []), products });
 });
 
-app.get("/orders/:phone", (req, res) => {
-  db.all("SELECT * FROM orders WHERE phone=? ORDER BY ordered_at DESC", [req.params.phone], (err, rows) => {
-    res.json(rows || []);
+// Razorpay checkout is available only for authenticated customers and business-confirmed
+// orders with recorded inventory. Browser callbacks alone never confirm a payment.
+app.post('/payments/create', customer, async (req, res) => { const payload=await transaction(async () => {
+  if (!providers.paymentsConfigured()) throw fail(503, 'Online payments are not configured. Please contact AAMM.');
+  const order = await get('SELECT * FROM orders WHERE reference=?', [clean(req.body.reference, 100)]);
+  if (!order || (req.session.role !== 'admin' && order.phone !== req.session.phone)) throw fail(404, 'Order not found in your account.');
+  if (order.status !== 'Order Confirmed') throw fail(409, 'AAMM must confirm the order and final price before payment.');
+  if (!/pickup|collect/i.test(order.delivery)) throw fail(409, 'Online payment currently supports store pickup; delivery charges require AAMM confirmation.');
+  const existing = await get("SELECT * FROM payments WHERE order_id=? AND status IN ('created','captured','captured_review_required') ORDER BY id DESC LIMIT 1", [order.id]);
+  if (existing) {
+    if (existing.status !== 'created') throw fail(409, 'A payment has already been recorded for this order.');
+    return { key_id: process.env.RAZORPAY_KEY_ID, order_id: existing.provider_order_id, amount: existing.amount, currency: 'INR', reference: order.reference };
+  }
+  const items = JSON.parse(order.items || '[]');
+  const cart = await validateCart(items);
+  if (cart.total !== order.total || !cart.total) throw fail(409, 'The catalogue price changed. Ask AAMM to confirm an updated order.');
+  for (const item of items) { const product = await get('SELECT stock_quantity FROM products WHERE id=?', [item.id]); if (product?.stock_quantity == null) throw fail(409, 'AAMM must verify inventory before accepting online payment.'); }
+  const providerOrder = await providers.razorpayCreateOrder({ amount: Math.round(cart.total * 100), receipt: order.reference });
+  await run('INSERT INTO payments(order_id,provider_order_id,amount,status) VALUES (?,?,?,?)', [order.id,providerOrder.id,providerOrder.amount,'created']);
+  await run("UPDATE orders SET payment_status='pending',payment_order_id=? WHERE id=?", [providerOrder.id,order.id]);
+  return { key_id: process.env.RAZORPAY_KEY_ID, order_id: providerOrder.id, amount: providerOrder.amount, currency: providerOrder.currency, reference: order.reference };
+}); res.json(payload); });
+async function recordCapturedPayment(payment, providerPayment) {
+  return transaction(async () => {
+    const current = await get('SELECT * FROM payments WHERE id=?', [payment.id]);
+    if (['captured','captured_review_required','refund_pending','refunded'].includes(current.status)) return { verified: true, status: current.status };
+    if (current.status !== 'created') throw fail(409, 'This payment cannot be captured in its current state.');
+    const order = await get('SELECT * FROM orders WHERE id=?', [current.order_id]);
+    if (providerPayment.order_id !== current.provider_order_id || providerPayment.amount !== current.amount || providerPayment.currency !== 'INR' || providerPayment.status !== 'captured' || providerPayment.captured !== true) throw fail(409, 'Payment has not been captured for the expected amount.');
+    const items = JSON.parse(order.items || '[]');
+    let inventoryAvailable = true;
+    for (const item of items) { const product = await get('SELECT stock_quantity,archived FROM products WHERE id=?', [item.id]); if (!product || product.archived || product.stock_quantity == null || product.stock_quantity < item.qty) inventoryAvailable = false; }
+    await run('UPDATE payments SET provider_payment_id=?,status=? WHERE id=?', [providerPayment.id,inventoryAvailable ? 'captured' : 'captured_review_required',current.id]);
+    if (!inventoryAvailable) {
+      await run("UPDATE orders SET payment_status='captured_review_required' WHERE id=?", [order.id]);
+      await notify(order.phone,'Payment requires review','Your payment was captured, but inventory changed. AAMM must resolve fulfillment or arrange a verified refund.',order.reference);
+      return { verified: true, status: 'captured_review_required', message: 'Payment captured; AAMM must review inventory before confirming fulfillment.' };
+    }
+    for (const item of items) {
+      const product = await get('SELECT stock_quantity FROM products WHERE id=?', [item.id]);
+      await run('UPDATE products SET stock_quantity=stock_quantity-? WHERE id=? AND stock_quantity>=?', [item.qty,item.id,item.qty]);
+      await run('INSERT INTO stock_movements(product_id,previous_quantity,new_quantity,reason,actor) VALUES (?,?,?,?,?)', [item.id,product.stock_quantity,product.stock_quantity-item.qty,'Verified Razorpay payment','payment provider']);
+      await run('INSERT INTO sales(product_id,qty) VALUES (?,?)', [item.id,item.qty]);
+    }
+    await run("UPDATE orders SET payment_status='captured' WHERE id=?", [order.id]);
+    await notify(order.phone,'Payment verified','Razorpay has confirmed that your payment was captured.',order.reference);
+    return { verified: true, status: 'captured' };
   });
+}
+app.post('/payments/verify', customer, async (req,res) => {
+  if (!providers.paymentsConfigured()) throw fail(503, 'Online payments are not configured.');
+  const providerOrderId = clean(req.body.razorpay_order_id || req.body.order_id,100);
+  const providerPaymentId = clean(req.body.razorpay_payment_id || req.body.payment_id,100);
+  const payment = await get('SELECT p.*,o.phone FROM payments p JOIN orders o ON o.id=p.order_id WHERE p.provider_order_id=?',[providerOrderId]);
+  if (!payment || (req.session.role !== 'admin' && payment.phone !== req.session.phone)) throw fail(404,'Payment not found in your account.');
+  if (!providers.verifyPaymentSignature({order_id:providerOrderId,payment_id:providerPaymentId,signature:req.body.razorpay_signature||req.body.signature})) throw fail(400,'Payment signature verification failed.');
+  const actual = await providers.razorpayGetPayment(providerPaymentId);
+  res.json(await recordCapturedPayment(payment,actual));
+});
+app.post('/payments/webhook', async (req,res) => {
+  if (!providers.paymentsConfigured() || !process.env.RAZORPAY_WEBHOOK_SECRET) throw fail(503,'Payment webhooks are not configured.');
+  if (!providers.verifyWebhook(req.rawBody,req.get('x-razorpay-signature'))) throw fail(400,'Webhook signature verification failed.');
+  const entity=req.body.payload?.payment?.entity;
+  if (req.body.event !== 'payment.captured' || !entity) return res.json({ok:true,ignored:true});
+  const payment=await get('SELECT * FROM payments WHERE provider_order_id=?',[entity.order_id]);
+  if (!payment) throw fail(404,'Payment order not found.');
+  const actual=await providers.razorpayGetPayment(entity.id);
+  await recordCapturedPayment(payment,actual); res.json({ok:true});
 });
 
-/* =====================================================================
-   START
-===================================================================== */
-app.listen(3000, () => {
-  console.log("✅ AAMM server running → http://localhost:3000");
+app.use('/admin', admin);
+app.post('/admin/payments/:id/refund', async (req,res) => {
+  if (!providers.paymentsConfigured()) throw fail(503,'Online payments are not configured.');
+  const payment=await get('SELECT * FROM payments WHERE id=?',[req.params.id]);
+  if (!payment || !['captured','captured_review_required'].includes(payment.status)) throw fail(409,'Only captured payments can be refunded.');
+  const refund=await providers.razorpayRefund(payment.provider_payment_id,{amount:payment.amount,receipt:`refund_${payment.id}`});
+  await transaction(async()=>{ await run('UPDATE payments SET status=? WHERE id=?',[refund.status==='processed'?'refunded':'refund_pending',payment.id]); await run('UPDATE orders SET payment_status=? WHERE id=?',[refund.status==='processed'?'refunded':'refund_pending',payment.order_id]); await audit(req,'refund_requested','payment',payment.id,{provider_refund_id:refund.id,status:refund.status}); });
+  res.json({id:refund.id,status:refund.status});
 });
+app.get('/admin/overview', async (req, res) => {
+  const count = async (table, where = '') => (await get(`SELECT COUNT(*) AS count FROM ${table} ${where}`)).count;
+  res.json({ products: await count('products', 'WHERE archived=0'), customers: await count('users'), orders: await count('orders'), verified_revenue: (await get("SELECT COALESCE(SUM(amount),0)/100.0 AS revenue FROM payments WHERE status='captured'")).revenue, pending_orders: await count('orders', "WHERE status NOT IN ('Delivered','Cancelled','Refunded','Returned')"), completed_orders: await count('orders', "WHERE status='Delivered'"), low_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity BETWEEN 1 AND 5'), out_of_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity=0'), pending_enquiries: await count('enquiries', "WHERE status!='Closed'"), pending_exchanges: await count('exchange_requests', "WHERE status NOT IN ('Exchange Completed','Rejected')"), inventory_configured: (await count('products','WHERE stock_quantity IS NOT NULL')) > 0 });
+});
+app.get('/admin/products', async (req, res) => res.json(await searchProducts()));
+app.get('/admin/orders', async (req, res) => res.json((await all('SELECT * FROM orders ORDER BY id DESC LIMIT 1000')).map(r => { const { tracking_token_hash,...safe }=r; return { ...safe, items: JSON.parse(r.items || '[]') }; })));
+app.get('/admin/enquiries', async (req, res) => res.json(await all('SELECT * FROM enquiries ORDER BY id DESC LIMIT 1000')));
+app.get('/admin/exchanges', async (req, res) => res.json(await all('SELECT * FROM exchange_requests ORDER BY id DESC LIMIT 1000')));
+app.get('/admin/customers', async (req, res) => res.json((await all('SELECT id,phone,name,email,address,delivery_pref FROM users ORDER BY id DESC LIMIT 1000'))));
+app.get('/admin/audit', async (req, res) => res.json(await all('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 500')));
+app.get('/admin/inventory', async (req, res) => res.json({ products: await searchProducts(), movements: await all('SELECT * FROM stock_movements ORDER BY id DESC LIMIT 500') }));
+app.get('/admin/notifications', async (req, res) => res.json(await all('SELECT * FROM notifications ORDER BY id DESC LIMIT 500')));
+const orderStatuses = ['Enquiry submitted','Order Placed','Order Confirmed','Processing','Packed','Shipped','Out for Delivery','Delivered','Payment Pending','Payment Failed','Cancelled','Return Requested','Returned','Refund Initiated','Refunded'];
+app.patch('/admin/orders/:id', async (req, res) => { await transaction(async () => {
+  const order = await get('SELECT * FROM orders WHERE id=?', [req.params.id]); if (!order) throw fail(404, 'Order not found.');
+  const status = clean(req.body.status, 100); if (!orderStatuses.includes(status)) throw fail(400, 'Choose a valid order status.');
+  if (/^Refund/.test(status)) throw fail(409, 'Refunds must be verified through the payment provider before a refund status can be recorded.');
+  await run('UPDATE orders SET status=?,courier=?,tracking_number=?,estimated_delivery=? WHERE id=?', [status,clean(req.body.courier, 100),clean(req.body.tracking_number, 200),clean(req.body.estimated_delivery, 100),order.id]);
+  await run('INSERT INTO order_status_history(order_id,previous_status,status,actor) VALUES (?,?,?,?)', [order.id,order.status,status,req.session.phone]);
+  await audit(req,'status_update','order',order.id,{ previous_status: order.status,status }); await notify(order.phone, 'Order status updated', status, order.reference); }); res.json({ ok: true });
+});
+async function updateRequest(req, res, table, statuses, amountKey) {
+  await transaction(async () => { const item = await get(`SELECT * FROM ${table} WHERE id=?`, [req.params.id]); if (!item) throw fail(404, 'Request not found.');
+  const status = clean(req.body.status, 100); if (!statuses.includes(status)) throw fail(400, 'Choose a valid request status.');
+  const amount = req.body[amountKey] ?? req.body.quotation ?? null;
+  if (amount !== null && (!Number.isFinite(Number(amount)) || Number(amount) < 0)) throw fail(400, 'Enter a valid amount.');
+  await run(`UPDATE ${table} SET status=?,notes=?,${amountKey}=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, [status,clean(req.body.notes, 2000),amount === null ? item[amountKey] : Number(amount),item.id]);
+  await audit(req,'status_update',table,item.id,{ previous_status:item.status,status }); await notify(item.phone,'Request updated',status,item.reference); }); res.json({ ok: true });
+}
+app.patch('/admin/enquiries/:id', (req,res) => updateRequest(req,res,'enquiries',['New','Reviewed','Quotation Sent','Closed'],'quotation_amount'));
+app.patch('/admin/exchanges/:id', (req,res) => updateRequest(req,res,'exchange_requests',['New','Under Review','Inspection Required','Offer Provided','Approved','Exchange Completed','Rejected'],'valuation'));
+
+function productInput(body, existing = {}) {
+  const display_name = clean(body.display_name ?? existing.display_name, 200); const category = clean(body.category ?? existing.category, 200);
+  if (!display_name || !category) throw fail(400, 'Product name and category are required.');
+  const price = body.price === '' || body.price === null ? null : body.price === undefined ? existing.price ?? null : Number(body.price);
+  if (price !== null && (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(price * 100))) throw fail(400, 'Enter a valid product price.');
+  const stock = body.stock_quantity === '' || body.stock_quantity === null ? null : body.stock_quantity === undefined ? existing.stock_quantity ?? null : Number(body.stock_quantity);
+  if (stock !== null && (!Number.isSafeInteger(stock) || stock < 0)) throw fail(400, 'Stock must be a non-negative whole number.');
+  return { display_name,name:display_name.toLowerCase(),category,subcategory:clean(body.subcategory ?? existing.subcategory, 200),vehicle:clean(body.vehicle ?? existing.vehicle, 200),price,description:clean(body.description ?? existing.description, 3000),sku:clean(body.sku ?? existing.sku,100)||null,brand:clean(body.brand ?? existing.brand,100)||null,stock_quantity:stock,compatibility_verified:body.compatibility_verified === true || body.compatibility_verified === 1 ? 1 : body.compatibility_verified === undefined ? existing.compatibility_verified || 0 : 0 };
+}
+app.post('/products', admin, async (req,res) => { const response=await transaction(async () => { const p=productInput(req.body); const keys=Object.keys(p); const result=await run(`INSERT INTO products(${keys.join(',')},updated_at) VALUES (${keys.map(()=>'?').join(',')},CURRENT_TIMESTAMP)`,Object.values(p)); if(p.stock_quantity!==null) await run('INSERT INTO stock_movements(product_id,new_quantity,reason,actor) VALUES (?,?,?,?)',[result.lastID,p.stock_quantity,'Initial product stock',req.session.phone]); await audit(req,'create','product',result.lastID); return {id:result.lastID}; }); res.status(201).json(response); });
+app.put('/products/:id', admin, async (req,res) => { await transaction(async () => { const old=await get('SELECT * FROM products WHERE id=? AND archived=0',[req.params.id]); if(!old) throw fail(404,'Product not found.'); const p=productInput(req.body,old); await run(`UPDATE products SET ${Object.keys(p).map(k=>`${k}=?`).join(',')},updated_at=CURRENT_TIMESTAMP WHERE id=?`,[...Object.values(p),old.id]); if(p.stock_quantity!==old.stock_quantity) await run('INSERT INTO stock_movements(product_id,previous_quantity,new_quantity,reason,actor) VALUES (?,?,?,?,?)',[old.id,old.stock_quantity,p.stock_quantity,clean(req.body.stock_reason,500)||'Administrator stock adjustment',req.session.phone]); await audit(req,'update','product',old.id); }); res.json({ok:true}); });
+app.delete('/products/:id', admin, async (req,res) => { const result=await run('UPDATE products SET archived=1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND archived=0',[req.params.id]); if(!result.changes) throw fail(404,'Product not found.'); await audit(req,'archive','product',req.params.id); res.json({ok:true}); });
+app.post('/sales', admin, (req,res) => res.status(409).json({error:'Sales are recorded only from verified captured payments.'}));
+
+// Only explicitly public assets can be downloaded. Never serve the repository root.
+const publicFiles = new Set(['about.html','brands.html','contact.html','exchange.html','policies.html','request-part.html','track-order.html','vehicle-finder.html','wishlist.html','index.html','products.html','product.html','cart.html','login.html','dashboard.html','admin.html','style.css','script.js','admin.js','robots.txt','sitemap.xml','favicon.svg']);
+app.get('/', (req,res) => res.sendFile(path.join(__dirname,'index.html')));
+app.use('/images', express.static(path.join(__dirname,'images'),{dotfiles:'deny',index:false}));
+app.get('/:file', (req,res,next) => { if(!publicFiles.has(req.params.file)) return next(); res.sendFile(path.join(__dirname,req.params.file)); });
+app.use((req,res) => res.status(404).json({error:'Page or API route not found.'}));
+app.use((err,req,res,next) => { const status=Number.isInteger(err.status)&&err.status>=400&&err.status<600?err.status:500; if(status>=500&&status!==503) console.error('AAMM request failed:',err.code||err.name); res.status(status).json({error:status===500?'The request could not be completed. Please try again.':err.message,...(err.code&&typeof err.code==='string'&&!err.code.startsWith('SQLITE')?{code:err.code}:{})}); });
+
+initialize().then(() => { const port=Number(process.env.PORT)||3000; app.listen(port,'0.0.0.0',()=>console.log(`AAMM server ready on port ${port}`)); }).catch(err=>{console.error('AAMM startup failed:',err.message);db.close();process.exitCode=1;});

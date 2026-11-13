@@ -3,3 +3,13 @@ node_modules/
 .DS_Store
 dist/
 build/
+# Runtime data, backups and local-only checks
+backups/
+*.db-wal
+*.db-shm
+*.db-journal
+.env.*
+!.env.example
+coverage/
+playwright-report/
+test-results/
