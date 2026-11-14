@@ -16,7 +16,11 @@ Open <http://localhost:3000>. No frontend build is required. `npm start` runs th
 
 Before running against business data, back up the actual deployed database and follow [DEPLOYMENT.md](docs/DEPLOYMENT.md). Set an absolute `DB_PATH` on persistent storage in production. Do not repeatedly copy the repository database over a live database.
 
-The owner-selected administrator ID is `9344898473`. Set a unique `ADMIN_PASSWORD` of at least 12 characters in the host secret settings to enable password access at `/admin.html`; an ID alone grants no access. Real administrator OTP additionally requires the configured owner phone and Twilio Verify. Customer Google sign-in requires a Web application OAuth client ID in `GOOGLE_CLIENT_ID`; see [Google setup](docs/GOOGLE_SIGN_IN.md). Optional phone sign-in requires a configured Twilio Verify account. Confirmation creates an immutable customer commercial invoice; a verified captured payment creates its receipt. Optional transactional SMS uses a separate configured sender/outbox and provider-reported delivery status. Optional OpenAI and Razorpay credentials are described in `.env.example`; missing providers are not simulated.
+The owner-selected administrator ID is `9344898473`. Set a unique `ADMIN_PASSWORD` of at least 12 characters in the host secret settings to enable password access at `/admin.html`; an ID alone grants no access. Real administrator OTP additionally requires the configured owner phone and Twilio Verify. Customer Google sign-in requires a Web application OAuth client ID in `GOOGLE_CLIENT_ID`; see [Google setup](docs/GOOGLE_SIGN_IN.md). Optional phone sign-in requires a configured Twilio Verify account.
+
+Confirmation creates an immutable customer commercial invoice. A provider-verified captured payment or an administrator-confirmed UPI bank credit creates an accurately labelled receipt. Optional transactional SMS uses a separate configured sender/outbox and provider-reported delivery status. Direct UPI uses `UPI_ID` and optional `UPI_PAYEE_NAME` from host settings. Customers scan the order QR or open their UPI app, then submit a transaction reference; the order stays pending until the administrator checks the actual bank credit. No Razorpay account is required for this manual route.
+
+Optional OpenAI and Razorpay credentials are described in `.env.example`; missing providers are not simulated.
 
 ## Check the application
 

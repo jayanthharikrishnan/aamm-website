@@ -53,7 +53,7 @@ Creation returns 201 `{id,reference,status:'Enquiry submitted',payment_status:'n
 
 All `/admin/*` routes and product writes require the server session's administrator role.
 
-- `GET /admin/overview`: real product/customer/order/enquiry/exchange counts, known inventory counts, verified captured revenue; no fabricated sales statistics.
+- `GET /admin/overview`: real product/customer/order/enquiry/exchange counts, known inventory counts, received-credit total in `verified_revenue` (provider-captured plus owner-confirmed UPI credits); no fabricated sales statistics.
 - `GET /admin/products`, `/admin/orders`, `/admin/enquiries`, `/admin/exchanges`, `/admin/customers`, `/admin/audit`, `/admin/inventory`, `/admin/notifications`: protected business records. Passwords and guest receipt hashes are not returned.
 - `POST /products`: `{display_name,category,subcategory?,vehicle?,price?,description?,sku?,brand?,stock_quantity?,compatibility_verified?}`.
 - `PUT /products/:id`: partial edits with the same fields; stock changes accept `stock_reason` and record movement history atomically.
@@ -91,7 +91,7 @@ The owner-confirmed ID/mobile `9344898473` is recorded in server-only `config/bu
 | `GET /bills/:id/print` | Owner/admin-only escaped printable HTML with English/Tamil controls; no public static document file. |
 | `POST /billing/guest` | `{reference,token,type:'invoice'|'receipt'}`; same constant-time receipt-secret verification as tracking, rate-limited, no-store. Returns printable HTML only for that order's already issued document. |
 
-Guest tracking includes a `bills` metadata list without billing names, addresses, phone or snapshot contents. A verified receipt secret is required to retrieve the private printable bill. Tokens remain in POST bodies, never URL parameters. A missing/unverified payment has no receipt. Actual Razorpay capture verification automatically creates an immutable receipt alongside payment/inventory bookkeeping; a browser payment callback or manual administrator status cannot create a fake paid receipt. A later refund is recorded separately and does not rewrite the original receipt.
+Guest tracking includes a `bills` metadata list without billing names, addresses, phone or snapshot contents. A verified receipt secret is required to retrieve the private printable bill. Tokens remain in POST bodies, never URL parameters. A missing/unconfirmed payment has no receipt. Actual Razorpay capture verification automatically creates an immutable provider-labelled receipt alongside payment/inventory bookkeeping. The separate direct-UPI confirmation route can issue an owner-confirmed bank-credit receipt. A browser callback, submitted reference or ordinary order-status edit cannot create a paid receipt. A later refund is recorded separately and does not rewrite the original receipt.
 
 ## Optional transactional SMS outbox
 
@@ -111,3 +111,22 @@ Transactional SMS is restricted to customer phones verified by the legitimate OT
 - `GET /auth/me` retains `{user,isAdmin}`. `GET /me` / `PUT /me` operate on the authenticated profile. A Google customer has no verified phone identity; `contact_phone` is editable delivery contact only, and the verified Google email is read-only.
 - `GET /my/orders`, `/my/requests`, `/my/bills` and `/notifications` enforce stable customer ownership. Owned tracking, bill printing and payments use the same authorization. Legacy phone routes require an actually phone-verified session or an administrator. An entered phone/email never merges accounts.
 - Original data and IDs remain intact; v4 uses additive identity/ownership columns and expiring one-use challenge records.
+
+## Direct UPI for this shop
+
+Direct UPI is a manual bank-credit workflow, separate from Razorpay. `UPI_ID` and optional `UPI_PAYEE_NAME` come from host environment settings; the receiving VPA is not hardcoded. Public `direct_upi` configuration reports `configured`, `payee_name`, `contact_phone` and `confirmation:"owner_bank_check"`; configuration checks VPA format and does not verify it with a bank. An entered phone number is contact information, not a payment address or an ownership credential.
+
+| Method / path | Authorization and behavior |
+| --- | --- |
+| `POST /payments/upi/details` | `{reference,token?}`. Requires the signed-in order owner, an administrator, or the order's private guest token. Creates/reuses a `manual_pending` intent from the confirmed immutable invoice and known stock. Returns the exact amount, payee, UPI intent and QR; no stock/sales/receipt is created. |
+| `POST /payments/upi/submit` | `{reference,token?,transaction_reference}` with a 12-digit UPI reference. Same ownership checks. Records `manual_submitted` for staff review; no stock deduction, sale or paid receipt is created from this assertion. |
+| `POST /admin/orders/:id/upi/confirm` | Administrator only: `{transaction_reference,amount,received:true}`. `amount` is an integer in **paise**, matched to the immutable invoice. `received:true` attests that the owner checked actual credit in the receiving bank account. A browser reference alone is insufficient. |
+| `POST /admin/orders/:id/upi/reject` | Administrator only: `{reason}` rejects a pending submission with an auditable reason. It is not a refund or reversal of a bank transfer. |
+
+Details return `{reference,amount,currency,payment_status,claim,upi_id,payee_name,upi_uri,qr_data_url}`. `amount` is integer paise; the UPI URI formats it in rupees. `claim.status` uses `pending`, `submitted`, `rejected`, `verified` or `verified_review_required`; order `payment_status` prefixes these with `manual_`. The QR is generated locally and contains the payment intent, never the guest token. Private payment responses use `Cache-Control: no-store`.
+
+Creating a direct-UPI intent selects that method for the order; an existing provider attempt prevents switching to UPI, and an existing manual intent prevents opening Razorpay. A new order or staff reconciliation is needed when changing methods. Unconfirmed reference claims are not proof of receipt; a **confirmed** reference is globally unique across direct-UPI orders.
+
+Confirmation records the owner, timestamp and unique transaction reference and atomically updates payment, stock/sales and the accurately labelled receipt. A repeated confirmation is idempotent. If inventory changed after payment, `manual_verified_review_required` preserves the confirmed credit for staff fulfillment/refund review instead of deducting unavailable stock; ordinary confirmation uses `manual_verified`.
+
+Manual receipts identify **owner-confirmed bank credit**, never provider/API verification. The application does not poll the bank or infer success from an app-open callback, screenshot or customer-supplied reference. A Razorpay refund endpoint cannot refund a direct UPI transfer. Any bank refund must be handled through the actual bank/payment app and reconciled separately. Provider and manual routes must not create a second paid receipt, sale or stock deduction for one order.

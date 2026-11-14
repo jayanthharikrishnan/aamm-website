@@ -598,7 +598,7 @@
                 "பட்டியலைப் பார்த்து உங்களுக்குத் தேவையான பாகங்களைச் சேர்க்கவும்.",
               ),
             )
-          : `<div class="cart-layout"><div>${items.map(({ p, qty }) => `<article class="cart-item"><div class="cart-thumb">${icon("part")}</div><div><h3><a href="product.html?id=${p.id}">${esc(name(p))}</a></h3><p>${esc(p.subcategory)} · ${esc(p.vehicle)}</p><div class="quantity"><button data-qty="${p.id}" data-delta="-1" aria-label="Decrease ${esc(name(p))} quantity">−</button><span>${qty}</span><button data-qty="${p.id}" data-delta="1" aria-label="Increase ${esc(name(p))} quantity">+</button></div></div><div class="cart-item-price">${money(p.price == null ? null : p.price * qty)}<button data-remove="${p.id}">${t("Remove", "நீக்கு")}</button></div></article>`).join("")}<a class="text-link" style="margin-top:22px" href="products.html">${icon("arrow")}${t("Continue exploring", "தொடர்ந்து பாருங்கள்")}</a></div><aside class="panel"><h2>${t("Enquiry summary", "விசாரணைச் சுருக்கம்")}</h2><div class="summary-row"><span>${t("Parts subtotal", "பாகங்களின் துணைத்தொகை")}</span><span>${money(items.reduce((s, i) => s + (i.p.price || 0) * i.qty, 0))}</span></div><div class="summary-row"><span>${t("Delivery", "டெலிவரி")}</span><span>${t("To be confirmed", "உறுதி செய்யப்படும்")}</span></div><div class="summary-row total"><span>${t("Estimated total", "மதிப்பிடப்பட்ட தொகை")}</span><span>${money(items.reduce((s, i) => s + (i.p.price || 0) * i.qty, 0))}</span></div><small>${items.some((i) => i.p.price == null) ? t("Some parts need a quotation. The estimate excludes those parts.", "சில பாகங்களுக்கு விலைப்புள்ளி தேவை. மதிப்பீட்டில் அவை சேர்க்கப்படவில்லை.") : t("Excludes unconfirmed delivery charges.", "உறுதி செய்யப்படாத டெலிவரி கட்டணங்கள் சேர்க்கப்படவில்லை.")}</small><form id="checkoutForm"><label class="field">${t("Your name", "உங்கள் பெயர்")}<input name="name" required maxlength="120" autocomplete="name"></label><label class="field">${t("Mobile number", "கைபேசி எண்")}<input name="phone" type="tel" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit Indian mobile" autocomplete="tel-national"></label><label class="field">${t("Delivery address", "டெலிவரி முகவரி")}<textarea name="address" required maxlength="1000" autocomplete="street-address"></textarea></label><label class="field">${t("Delivery preference", "டெலிவரி விருப்பம்")}<select name="delivery" required><option value="pickup">Pick up at the store</option><option value="bus">Bus delivery enquiry</option><option value="lorry">Lorry service enquiry</option></select></label><button class="button full" type="submit">${icon("chat")}${t("Prepare WhatsApp enquiry", "வாட்ஸ்அப் விசாரணையைத் தயார் செய்")}</button><p class="error" id="checkoutError" role="alert"></p></form><div class="notice">${config.features?.payments ? t("Submitting creates an enquiry. No payment is taken here. After Alagar Automobiles confirms a pickup order and inventory, sign in to pay securely.", "இங்கு விசாரணை மட்டுமே உருவாகும். Alagar Automobiles ஆர்டரை உறுதி செய்த பிறகு உள்நுழைந்து கட்டணம் செலுத்தலாம்.") : t("Submitting creates an enquiry, not a confirmed order. No payment is taken. Online payment is not configured.", "சமர்ப்பித்தல் ஒரு விசாரணையை உருவாக்கும்; உறுதி செய்யப்பட்ட ஆர்டர் அல்ல. பணம் பெறப்படாது. இணையக் கட்டணம் கட்டமைக்கப்படவில்லை.")}</div><div id="checkoutResult"></div></aside></div>`),
+          : `<div class="cart-layout"><div>${items.map(({ p, qty }) => `<article class="cart-item"><div class="cart-thumb">${icon("part")}</div><div><h3><a href="product.html?id=${p.id}">${esc(name(p))}</a></h3><p>${esc(p.subcategory)} · ${esc(p.vehicle)}</p><div class="quantity"><button data-qty="${p.id}" data-delta="-1" aria-label="Decrease ${esc(name(p))} quantity">−</button><span>${qty}</span><button data-qty="${p.id}" data-delta="1" aria-label="Increase ${esc(name(p))} quantity">+</button></div></div><div class="cart-item-price">${money(p.price == null ? null : p.price * qty)}<button data-remove="${p.id}">${t("Remove", "நீக்கு")}</button></div></article>`).join("")}<a class="text-link" style="margin-top:22px" href="products.html">${icon("arrow")}${t("Continue exploring", "தொடர்ந்து பாருங்கள்")}</a></div><aside class="panel"><h2>${t("Enquiry summary", "விசாரணைச் சுருக்கம்")}</h2><div class="summary-row"><span>${t("Parts subtotal", "பாகங்களின் துணைத்தொகை")}</span><span>${money(items.reduce((s, i) => s + (i.p.price || 0) * i.qty, 0))}</span></div><div class="summary-row"><span>${t("Delivery", "டெலிவரி")}</span><span>${t("To be confirmed", "உறுதி செய்யப்படும்")}</span></div><div class="summary-row total"><span>${t("Estimated total", "மதிப்பிடப்பட்ட தொகை")}</span><span>${money(items.reduce((s, i) => s + (i.p.price || 0) * i.qty, 0))}</span></div><small>${items.some((i) => i.p.price == null) ? t("Some parts need a quotation. The estimate excludes those parts.", "சில பாகங்களுக்கு விலைப்புள்ளி தேவை. மதிப்பீட்டில் அவை சேர்க்கப்படவில்லை.") : t("Excludes unconfirmed delivery charges.", "உறுதி செய்யப்படாத டெலிவரி கட்டணங்கள் சேர்க்கப்படவில்லை.")}</small><form id="checkoutForm"><label class="field">${t("Your name", "உங்கள் பெயர்")}<input name="name" required maxlength="120" autocomplete="name"></label><label class="field">${t("Mobile number", "கைபேசி எண்")}<input name="phone" type="tel" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit Indian mobile" autocomplete="tel-national"></label><label class="field">${t("Delivery address", "டெலிவரி முகவரி")}<textarea name="address" required maxlength="1000" autocomplete="street-address"></textarea></label><label class="field">${t("Delivery preference", "டெலிவரி விருப்பம்")}<select name="delivery" required><option value="pickup">Pick up at the store</option><option value="bus">Bus delivery enquiry</option><option value="lorry">Lorry service enquiry</option></select></label><button class="button full" type="submit">${icon("chat")}${t("Prepare WhatsApp enquiry", "வாட்ஸ்அப் விசாரணையைத் தயார் செய்")}</button><p class="error" id="checkoutError" role="alert"></p></form><div class="notice">${config.direct_upi?.configured ? t("Send your enquiry first. After Alagar Automobiles confirms stock and the final amount, open Track an enquiry to pay by UPI.", "முதலில் விசாரணையை அனுப்புங்கள். இருப்பையும் இறுதித் தொகையையும் Alagar Automobiles உறுதி செய்த பிறகு, விசாரணை நிலை பக்கத்தில் UPI மூலம் செலுத்தலாம்.") : config.features?.payments ? t("Submitting creates an enquiry. No payment is taken here. After Alagar Automobiles confirms a pickup order and inventory, sign in to pay securely.", "இங்கு விசாரணை மட்டுமே உருவாகும். Alagar Automobiles ஆர்டரை உறுதி செய்த பிறகு உள்நுழைந்து கட்டணம் செலுத்தலாம்.") : t("Submitting creates an enquiry, not a confirmed order. No payment is taken. Online payment is not configured.", "சமர்ப்பித்தல் ஒரு விசாரணையை உருவாக்கும்; உறுதி செய்யப்பட்ட ஆர்டர் அல்ல. பணம் பெறப்படாது. இணையக் கட்டணம் கட்டமைக்கப்படவில்லை.")}</div><div id="checkoutResult"></div></aside></div>`),
     );
     if (!items.length) return;
     document.querySelectorAll("[data-qty]").forEach(
@@ -1053,7 +1053,7 @@
                   )
                   .join("")
               : `<p class="muted">${t("No updates yet.", "இன்னும் தகவல்கள் இல்லை.")}</p>`
-          }</aside></div><section class="section"><div class="section-heading"><h2>${t("Your orders & enquiries", "உங்கள் ஆர்டர்கள் மற்றும் விசாரணைகள்")}</h2></div>${orders.length ? `<div class="table-wrap panel"><table class="data-table"><thead><tr><th>Reference</th><th>Date</th><th>Status</th><th>Total</th><th>Payment</th><th>Actions</th></tr></thead><tbody>${orders.map((o) => `<tr><td>${esc(displayRef(o.reference || `Legacy #${o.id}`))}</td><td>${esc(o.ordered_at)}</td><td>${esc(o.status)}</td><td>${money(o.total)}</td><td>${esc(o.payment_status)}</td><td>${o.reference ? `<button class="button secondary small" data-order-track="${esc(o.reference)}">${t("View timeline", "நிலையைக் காண்க")}</button>` : ""} ${config.features?.payments && o.status === "Order Confirmed" && !["captured", "refunded", "captured_review_required"].includes(o.payment_status) ? `<button class="button small" data-pay="${esc(o.reference)}">${t("Pay with Razorpay", "Razorpay மூலம் செலுத்துங்கள்")}</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : empty(t("Your first enquiry starts here.", "உங்கள் முதல் விசாரணை இங்கே தொடங்குகிறது."), t("Browse our catalogue and get in touch.", "எங்கள் பட்டியலைப் பார்த்து தொடர்பு கொள்ளுங்கள்."))}<div id="accountOrderDetail"></div></section>${bills.length ? `<section class="section customer-bills"><div class="section-heading"><h2>${t("Your invoices & receipts", "உங்கள் விலைப்பட்டியல்கள் மற்றும் ரசீதுகள்")}</h2></div><div class="bill-list">${bills.map((b) => `<a class="bill-link" href="${esc(b.print_url)}" target="_blank" rel="noopener"><span><strong>${esc(b.number)}</strong><small>${b.kind === "receipt" ? t("Payment receipt", "கட்டண ரசீது") : t("Customer invoice", "வாடிக்கையாளர் விலைப்பட்டியல்")} · ${esc(displayRef(b.order_reference))}</small></span><span>${money(b.total)} ${icon("arrow")}</span></a>`).join("")}</div></section>` : ""}<section class="section"><div class="section-heading"><h2>${t("Parts & exchange requests", "பாகங்கள் மற்றும் மாற்றுக் கோரிக்கைகள்")}</h2></div><div class="table-wrap panel"><table class="data-table"><thead><tr><th>Reference</th><th>Part</th><th>Status</th><th>Quotation / offer</th><th>Updated</th></tr></thead><tbody>${[...(requests.enquiries || []).map((r) => ({ ...r, amount: r.quotation_amount })), ...(requests.exchanges || []).map((r) => ({ ...r, amount: r.valuation }))].map((r) => `<tr><td>${esc(displayRef(r.reference))}</td><td>${esc(r.part_name)}</td><td>${esc(r.status)}</td><td>${r.amount == null ? "—" : money(r.amount)}</td><td>${esc(r.updated_at || r.created_at)}</td></tr>`).join("") || '<tr><td colspan="5">No requests yet.</td></tr>'}</tbody></table></div></section>`,
+          }</aside></div><section class="section"><div class="section-heading"><h2>${t("Your orders & enquiries", "உங்கள் ஆர்டர்கள் மற்றும் விசாரணைகள்")}</h2></div>${orders.length ? `<div class="table-wrap panel"><table class="data-table"><thead><tr><th>Reference</th><th>Date</th><th>Status</th><th>Total</th><th>Payment</th><th>Actions</th></tr></thead><tbody>${orders.map((o) => `<tr><td>${esc(displayRef(o.reference || `Legacy #${o.id}`))}</td><td>${esc(o.ordered_at)}</td><td>${esc(o.status)}</td><td>${money(o.total)}</td><td data-payment-status="${esc(o.reference || "")}">${esc(paymentStatusLabel(o.payment_status))}</td><td>${o.reference ? `<button class="button secondary small" data-order-track="${esc(o.reference)}">${t("View timeline", "நிலையைக் காண்க")}</button>` : ""} ${directUpiAction(o)} ${config.features?.payments && o.status === "Order Confirmed" && !["captured", "refunded", "captured_review_required", "refund_pending", "manual_pending", "manual_submitted", "manual_verified", "manual_verified_review_required"].includes(o.payment_status) ? `<button class="button small" data-pay="${esc(o.reference)}">${t("Pay with Razorpay", "Razorpay மூலம் செலுத்துங்கள்")}</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : empty(t("Your first enquiry starts here.", "உங்கள் முதல் விசாரணை இங்கே தொடங்குகிறது."), t("Browse our catalogue and get in touch.", "எங்கள் பட்டியலைப் பார்த்து தொடர்பு கொள்ளுங்கள்."))}<div id="accountOrderDetail"></div></section>${bills.length ? `<section class="section customer-bills"><div class="section-heading"><h2>${t("Your invoices & receipts", "உங்கள் விலைப்பட்டியல்கள் மற்றும் ரசீதுகள்")}</h2></div><div class="bill-list">${bills.map((b) => `<a class="bill-link" href="${esc(b.print_url)}" target="_blank" rel="noopener"><span><strong>${esc(b.number)}</strong><small>${b.kind === "receipt" ? t("Payment receipt", "கட்டண ரசீது") : t("Customer invoice", "வாடிக்கையாளர் விலைப்பட்டியல்")} · ${esc(displayRef(b.order_reference))}</small></span><span>${money(b.total)} ${icon("arrow")}</span></a>`).join("")}</div></section>` : ""}<section class="section"><div class="section-heading"><h2>${t("Parts & exchange requests", "பாகங்கள் மற்றும் மாற்றுக் கோரிக்கைகள்")}</h2></div><div class="table-wrap panel"><table class="data-table"><thead><tr><th>Reference</th><th>Part</th><th>Status</th><th>Quotation / offer</th><th>Updated</th></tr></thead><tbody>${[...(requests.enquiries || []).map((r) => ({ ...r, amount: r.quotation_amount })), ...(requests.exchanges || []).map((r) => ({ ...r, amount: r.valuation }))].map((r) => `<tr><td>${esc(displayRef(r.reference))}</td><td>${esc(r.part_name)}</td><td>${esc(r.status)}</td><td>${r.amount == null ? "—" : money(r.amount)}</td><td>${esc(r.updated_at || r.created_at)}</td></tr>`).join("") || '<tr><td colspan="5">No requests yet.</td></tr>'}</tbody></table></div></section>`,
       );
       $("#customerLogout").onclick = async () => {
         await api("/auth/logout", { method: "POST" });
@@ -1103,12 +1103,14 @@
                 body: JSON.stringify({ reference: el.dataset.orderTrack }),
               });
               $("#accountOrderDetail").innerHTML = trackingView(result);
+              bindUpiPayments($("#accountOrderDetail"));
               $("#accountOrderDetail").scrollIntoView({ block: "start" });
             } catch (error) {
               toast(error.message);
             }
           }),
       );
+      bindUpiPayments($("#app"));
       document
         .querySelectorAll("[data-pay]")
         .forEach((el) => (el.onclick = () => startPayment(el.dataset.pay, el)));
@@ -1119,8 +1121,133 @@
       );
     }
   }
+  function paymentStatusLabel(value) {
+    const labels = {
+      manual_pending: t("UPI payment not confirmed", "UPI கட்டணம் உறுதி செய்யப்படவில்லை"),
+      manual_submitted: t("Payment awaiting confirmation", "கட்டண உறுதி காத்திருக்கிறது"),
+      manual_verified: t("Payment confirmed by Alagar Automobiles", "கட்டணத்தை Alagar Automobiles உறுதி செய்துள்ளது"),
+      manual_verified_review_required: t("Payment received · fulfilment under review", "பணம் பெறப்பட்டது · வழங்குதல் ஆய்வில் உள்ளது"),
+      manual_rejected: t("Payment reference needs review", "கட்டணக் குறிப்பைச் சரிபார்க்க வேண்டும்"),
+    };
+    return labels[value] || value || t("Not requested", "கோரப்படவில்லை");
+  }
+  function directUpiAction(order) {
+    if (!config.direct_upi?.configured || !order.reference) return "";
+    if (order.payment_status === "manual_submitted") return `<p class="upi-order-status" role="status">${t("Payment awaiting confirmation. Alagar Automobiles will check its bank account.", "கட்டண உறுதி காத்திருக்கிறது. Alagar Automobiles தனது வங்கிக் கணக்கைச் சரிபார்க்கும்.")}</p>`;
+    if (order.status !== "Order Confirmed" || ["captured", "captured_review_required", "refunded", "refund_pending", "pending", "manual_verified", "manual_verified_review_required"].includes(order.payment_status)) return "";
+    return `<button type="button" class="button small upi-pay-button" data-upi-pay="${esc(order.reference)}">${t("Pay by UPI", "UPI மூலம் செலுத்து")}</button>`;
+  }
+  function bindUpiPayments(root, credentials = {}) {
+    root.querySelectorAll("[data-upi-pay]").forEach(button => {
+      button.onclick = () => startDirectUpiPayment(button.dataset.upiPay, button, credentials);
+    });
+  }
+  function markUpiSubmitted(reference) {
+    document.querySelectorAll("[data-payment-status]").forEach(node => {
+      if (node.dataset.paymentStatus === reference) node.textContent = paymentStatusLabel("manual_submitted");
+    });
+    document.querySelectorAll("[data-upi-pay]").forEach(button => {
+      if (button.dataset.upiPay !== reference) return;
+      const pending = document.createElement("p");
+      pending.className = "upi-order-status";
+      pending.setAttribute("role", "status");
+      pending.textContent = t("Payment awaiting confirmation", "கட்டண உறுதி காத்திருக்கிறது");
+      button.replaceWith(pending);
+    });
+    document.querySelectorAll("[data-pay]").forEach(button => {
+      if (button.dataset.pay === reference) button.remove();
+    });
+  }
+  async function startDirectUpiPayment(reference, button, credentials = {}) {
+    button.disabled = true;
+    $("#upiDialog")?.remove();
+    const dialog = document.createElement("dialog");
+    dialog.id = "upiDialog";
+    dialog.className = "upi-dialog";
+    dialog.setAttribute("aria-labelledby", "upiTitle");
+    dialog.innerHTML = `<div class="upi-dialog-header"><h2 id="upiTitle">${t("Pay by UPI", "UPI மூலம் செலுத்து")}</h2><div class="upi-dialog-controls"><button type="button" class="language-switch" id="upiLanguageToggle" lang="${language === "en" ? "ta" : "en"}">${language === "en" ? "தமிழ்" : "English"}</button><button type="button" class="icon-button" id="upiClose" aria-label="${t("Close payment details", "கட்டண விவரங்களை மூடு")}">${icon("close")}</button></div></div><div id="upiPaymentContent" class="upi-payment-content" aria-busy="true"><p role="status">${t("Loading payment details…", "கட்டண விவரங்கள் ஏற்றப்படுகின்றன…")}</p></div>`;
+    document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    $("#upiClose", dialog).onclick = () => dialog.close();
+    dialog.showModal();
+    const auth = { reference, ...(credentials.token ? { token: credentials.token } : {}) };
+    let currentDetails = null;
+    function renderPayment(details) {
+      if (!dialog.isConnected) return;
+      currentDetails = details;
+      const content = $("#upiPaymentContent", dialog);
+      const submitted = details.payment_status === "manual_submitted" || details.claim?.status === "submitted";
+      const received = ["manual_verified", "manual_verified_review_required", "captured", "captured_review_required"].includes(details.payment_status);
+      $("#upiTitle", dialog).textContent = t("Pay by UPI", "UPI மூலம் செலுத்து");
+      const langButton = $("#upiLanguageToggle", dialog);
+      langButton.textContent = language === "en" ? "தமிழ்" : "English";
+      langButton.lang = language === "en" ? "ta" : "en";
+      $("#upiClose", dialog).setAttribute("aria-label", t("Close payment details", "கட்டண விவரங்களை மூடு"));
+      content.setAttribute("aria-busy", "false");
+      if (submitted || received) {
+        content.innerHTML = `<p class="upi-payment-reference">${esc(displayRef(reference))}</p><p id="upiPaymentStatus" class="upi-confirmation-status" role="status" aria-live="polite">${received ? esc(paymentStatusLabel(details.payment_status)) : t("Payment details submitted. Awaiting confirmation from Alagar Automobiles.", "கட்டண விவரங்கள் சமர்ப்பிக்கப்பட்டன. Alagar Automobiles உறுதிக்காகக் காத்திருக்கிறது.")}</p>${details.claim?.transaction_reference ? `<p class="muted">${t("UPI reference", "UPI குறிப்பு")}: ${esc(details.claim.transaction_reference)}</p>` : ""}${submitted ? `<p class="muted">${t("Please do not pay again. Your order is marked paid only after we check the credit in our bank account.", "மீண்டும் பணம் செலுத்த வேண்டாம். எங்கள் வங்கிக் கணக்கில் பணம் வந்ததைச் சரிபார்த்த பிறகே ஆர்டர் பணம் பெற்றதாகக் குறிக்கப்படும்.")}</p>` : ""}`;
+        return;
+      }
+      const upi = new URL(details.upi_uri);
+      if (!Number.isSafeInteger(details.amount) || details.amount <= 0 || details.currency !== "INR" || upi.protocol !== "upi:" || upi.hostname !== "pay" || upi.searchParams.get("pa") !== details.upi_id || upi.searchParams.get("am") !== (details.amount / 100).toFixed(2) || upi.searchParams.get("cu") !== "INR" || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(details.qr_data_url)) throw new Error(t("Payment details could not be verified. Please contact Alagar Automobiles.", "கட்டண விவரங்களைச் சரிபார்க்க முடியவில்லை. Alagar Automobiles ஐத் தொடர்பு கொள்ளுங்கள்."));
+      const rejected = details.claim?.status === "rejected";
+      content.innerHTML = `<p class="upi-payment-reference">${esc(displayRef(reference))}</p><div class="upi-payment-total">${money(details.amount / 100)}</div><p class="upi-payee">${t("Pay", "பணம் பெறுபவர்")} <strong>${esc(details.payee_name)}</strong></p><p class="upi-id">${esc(details.upi_id)}</p><div class="upi-payment-actions"><a id="upiOpenApp" class="button" href="${esc(upi.href)}">${t("Open UPI app", "UPI செயலியைத் திற")}${icon("arrow")}</a><button type="button" id="upiCopyId" class="button secondary">${t("Copy UPI ID", "UPI ID நகலெடு")}</button></div><details class="upi-qr-option"><summary>${t("Scan a QR code instead", "QR குறியீட்டை ஸ்கேன் செய்")}</summary><img class="upi-qr" src="${esc(details.qr_data_url)}" alt="${t("UPI QR code for this order", "இந்த ஆர்டருக்கான UPI QR குறியீடு")}" width="240" height="240"></details><p class="upi-payment-help">${t("Check the recipient in your UPI app before paying. Return here after payment and enter the 12-digit UPI reference from your bank or UPI app. Never enter your UPI PIN here.", "செலுத்தும் முன் UPI செயலியில் பணம் பெறுபவரைச் சரிபாருங்கள். பணம் செலுத்திய பிறகு, உங்கள் வங்கி அல்லது UPI செயலியில் உள்ள 12 இலக்க UPI குறிப்பை இங்கே உள்ளிடுங்கள். UPI PIN ஐ இங்கே உள்ளிட வேண்டாம்.")}</p>${rejected ? `<div class="notice">${t("Your previous payment reference was not confirmed. Check your bank before making another payment.", "முந்தைய கட்டணக் குறிப்பு உறுதி செய்யப்படவில்லை. மீண்டும் பணம் செலுத்தும் முன் உங்கள் வங்கியைச் சரிபாருங்கள்.")}${details.claim.rejection_reason ? `<p>${esc(details.claim.rejection_reason)}</p>` : ""}</div>` : ""}<form id="upiPaymentForm"><label class="field">${t("12-digit UPI reference", "12 இலக்க UPI குறிப்பு")}<input name="transaction_reference" type="text" inputmode="numeric" pattern="[0-9]{12}" minlength="12" maxlength="12" required autocomplete="off" aria-describedby="upiReferenceHelp"></label><small class="upi-payment-help" id="upiReferenceHelp">${t("Also called UTR or RRN. Submitting it asks us to check your payment.", "இது UTR அல்லது RRN என்றும் அழைக்கப்படும். சமர்ப்பித்தால் உங்கள் கட்டணத்தைச் சரிபார்ப்போம்.")}</small><p id="upiPaymentError" class="error" role="alert"></p><button type="submit" class="button full">${t("Submit payment details", "கட்டண விவரங்களைச் சமர்ப்பி")}</button></form><p class="upi-payment-help">${t("Payment confirmation is manual. Alagar Automobiles checks its bank account before issuing a receipt.", "கட்டண உறுதி கைமுறையாகச் செய்யப்படும். ரசீது வழங்கும் முன் Alagar Automobiles தனது வங்கிக் கணக்கைச் சரிபார்க்கும்.")}</p>`;
+      $("#upiCopyId", dialog).onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(details.upi_id);
+          toast(t("UPI ID copied", "UPI ID நகலெடுக்கப்பட்டது"));
+        } catch {
+          const id = $(".upi-id", dialog);
+          const selection = getSelection(), range = document.createRange();
+          range.selectNodeContents(id);
+          selection.removeAllRanges(); selection.addRange(range);
+          toast(t("Select and copy the UPI ID shown here.", "இங்கே உள்ள UPI ID ஐத் தேர்ந்தெடுத்து நகலெடுக்கவும்."));
+        }
+      };
+      $("#upiPaymentForm", dialog).onsubmit = async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        const submit = form.querySelector('[type="submit"]');
+        submit.disabled = true;
+        $("#upiPaymentError", dialog).textContent = "";
+        try {
+          const transaction_reference = new FormData(form).get("transaction_reference");
+          const result = await api("/payments/upi/submit", { method: "POST", body: JSON.stringify({ ...auth, transaction_reference }) });
+          if (result.payment_status !== "manual_submitted" && result.status !== "manual_submitted" && result.claim?.status !== "submitted") throw new Error(t("Payment details could not be submitted. Check your order before retrying.", "கட்டண விவரங்களைச் சமர்ப்பிக்க முடியவில்லை. மீண்டும் முயலும் முன் ஆர்டரைச் சரிபாருங்கள்."));
+          markUpiSubmitted(reference);
+          renderPayment({ ...details, ...result, payment_status: "manual_submitted", claim: { status: "submitted", transaction_reference } });
+        } catch (error) {
+          if (dialog.isConnected) {
+            $("#upiPaymentError", dialog).textContent = error.message;
+            submit.disabled = false;
+          }
+        }
+      };
+    }
+    $("#upiLanguageToggle", dialog).onclick = () => {
+      const entered = $("#upiPaymentForm [name=transaction_reference]", dialog)?.value;
+      language = language === "en" ? "ta" : "en";
+      write("aamm_language", language);
+      renderHeader(); renderFooter();
+      if (currentDetails) renderPayment(currentDetails);
+      if (entered && $("#upiPaymentForm [name=transaction_reference]", dialog)) $("#upiPaymentForm [name=transaction_reference]", dialog).value = entered;
+    };
+    try {
+      const details = await api("/payments/upi/details", { method: "POST", body: JSON.stringify(auth) });
+      renderPayment(details);
+    } catch (error) {
+      if (dialog.isConnected) {
+        const content = $("#upiPaymentContent", dialog);
+        content.setAttribute("aria-busy", "false");
+        content.innerHTML = `<p id="upiPaymentError" class="error" role="alert">${esc(error.message)}</p><p class="muted">${t("No payment has been confirmed. Close this panel and check your order before trying again.", "கட்டணம் உறுதி செய்யப்படவில்லை. இந்தச் சாளரத்தை மூடி, மீண்டும் முயலும் முன் ஆர்டரைச் சரிபாருங்கள்.")}</p>`;
+      }
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
+  }
   function trackingView(result, guest = false) {
-    return `<section class="panel tracking-panel" style="margin-top:23px"><h2>${esc(displayRef(result.reference))}</h2><span class="badge">${esc(result.status)}</span><div class="summary-row"><span>${t("Payment", "கட்டணம்")}</span><span>${esc(result.payment_status || "Not requested")}</span></div>${result.tracking_number ? `<div class="summary-row"><span>${t("Courier tracking", "கூரியர் கண்காணிப்பு")}</span><span>${esc(result.courier || "")} ${esc(result.tracking_number)}</span></div>` : ""}${result.estimated_delivery ? `<div class="summary-row"><span>${t("Estimated delivery", "மதிப்பிடப்பட்ட டெலிவரி")}</span><span>${esc(result.estimated_delivery)}</span></div>` : ""}<ol class="timeline">${(result.history || []).map((h) => `<li>${esc(h.status || h.new_status)}<small>${esc(h.created_at || h.timestamp || "")}</small></li>`).join("") || `<li>${esc(result.status)}</li>`}</ol>${(result.bills || []).length ? `<div class="bill-list">${result.bills.map((b) => (guest ? `<button class="bill-link" data-guest-bill="${esc(b.kind)}"><span>${b.kind === "receipt" ? t("Payment receipt", "கட்டண ரசீது") : t("View invoice", "விலைப்பட்டியலைக் காண்க")}<small>${esc(b.number)}</small></span>${icon("arrow")}</button>` : `<a class="bill-link" href="${esc(b.print_url)}" target="_blank" rel="noopener">${esc(b.number)}${icon("arrow")}</a>`)).join("")}</div>` : ""}<small class="muted">${t("Status updates from Alagar Automobiles.", "அழகர் ஆட்டோமொபைல்ஸ் வழங்கும் நிலைத் தகவல்கள்.")}</small></section>`;
+    return `<section class="panel tracking-panel" style="margin-top:23px"><h2>${esc(displayRef(result.reference))}</h2><span class="badge">${esc(result.status)}</span><div class="summary-row"><span>${t("Payment", "கட்டணம்")}</span><span data-payment-status="${esc(result.reference || "")}">${esc(paymentStatusLabel(result.payment_status))}</span></div>${directUpiAction(result)}${result.tracking_number ? `<div class="summary-row"><span>${t("Courier tracking", "கூரியர் கண்காணிப்பு")}</span><span>${esc(result.courier || "")} ${esc(result.tracking_number)}</span></div>` : ""}${result.estimated_delivery ? `<div class="summary-row"><span>${t("Estimated delivery", "மதிப்பிடப்பட்ட டெலிவரி")}</span><span>${esc(result.estimated_delivery)}</span></div>` : ""}<ol class="timeline">${(result.history || []).map((h) => `<li>${esc(h.status || h.new_status)}<small>${esc(h.created_at || h.timestamp || "")}</small></li>`).join("") || `<li>${esc(result.status)}</li>`}</ol>${(result.bills || []).length ? `<div class="bill-list">${result.bills.map((b) => (guest ? `<button class="bill-link" data-guest-bill="${esc(b.kind)}"><span>${b.kind === "receipt" ? t("Payment receipt", "கட்டண ரசீது") : t("View invoice", "விலைப்பட்டியலைக் காண்க")}<small>${esc(b.number)}</small></span>${icon("arrow")}</button>` : `<a class="bill-link" href="${esc(b.print_url)}" target="_blank" rel="noopener">${esc(b.number)}${icon("arrow")}</a>`)).join("")}</div>` : ""}<small class="muted">${t("Status updates from Alagar Automobiles.", "அழகர் ஆட்டோமொபைல்ஸ் வழங்கும் நிலைத் தகவல்கள்.")}</small></section>`;
   }
   async function openGuestBill(details, type, button) {
     const viewer = window.open("about:blank", "_blank");
@@ -1275,6 +1402,7 @@
           body: JSON.stringify(details),
         });
         $("#trackResult").innerHTML = trackingView(result, true);
+        bindUpiPayments($("#trackResult"), details);
         document
           .querySelectorAll("[data-guest-bill]")
           .forEach(
@@ -1296,7 +1424,7 @@
           "Alagar Automobiles இல் விசாரணைகள், ஆர்டர்கள் மற்றும் உங்கள் தகவல் எவ்வாறு செயல்படுகிறது.",
         ),
       ) +
-        `<article class="panel narrow legal-copy"><h2 id="ordering">${t("Enquiries & ordering", "விசாரணைகள் மற்றும் ஆர்டர்")}</h2><p>${t("Catalogue prices are references from the existing product records. Availability, exact compatibility, delivery costs and final pricing must be confirmed by Alagar Automobiles. Submitting a cart or sending a WhatsApp message is an enquiry and does not confirm a sale. Online payments are unavailable until a payment provider is configured.", "பட்டியல் விலைகள் தற்போதைய பதிவுகளின் குறிப்புகள். கிடைக்கும் நிலை, பொருத்தம், டெலிவரி கட்டணம் மற்றும் இறுதி விலையை Alagar Automobiles உறுதி செய்ய வேண்டும். விசாரணை அனுப்புதல் விற்பனையை உறுதி செய்யாது.")}</p><h2>${t("Returns, refunds & exchanges", "திரும்பப் பெறுதல், பணத்திருப்பம் மற்றும் மாற்றம்")}</h2><p>${t("Contact Alagar Automobiles before placing an order to confirm the applicable return, refund, warranty and exchange terms for your part. No blanket return period or exchange valuation is promised by this website. Old-part exchange enquiries require the team’s review and inspection.", "ஆர்டர் செய்யும் முன் பாகத்திற்கான திரும்பப் பெறுதல், பணத்திருப்பம், உத்தரவாதம் மற்றும் மாற்று விதிகளை Alagar Automobiles உடன் உறுதி செய்யுங்கள். மாற்று விசாரணைகள் குழுவின் ஆய்விற்கு உட்பட்டவை.")}</p><h2 id="privacy">${t("Your information", "உங்கள் தகவல்")}</h2><p>${t("Enquiry forms collect your name, phone number, vehicle/part details and message so Alagar Automobiles can respond. Cart enquiries also collect your delivery preference and address. Do not submit payment credentials or sensitive identity documents. Contact Alagar Automobiles by phone to request correction or deletion of enquiry information.", "விசாரணைக்கு பதிலளிக்க உங்கள் பெயர், கைபேசி எண், வாகனம்/பாகம் விவரங்கள் மற்றும் செய்தி சேகரிக்கப்படும். ஆர்டர் விசாரணைகளில் முகவரியும் பெறப்படும். கட்டண ரகசியங்கள் அல்லது முக்கிய அடையாள ஆவணங்களைச் சமர்ப்பிக்க வேண்டாம்.")}</p><h2 id="google-sign-in">${t("Google sign-in", "Google உள்நுழைவு")}</h2><p>${t("If you choose Google sign-in, we use your Google account identifier, name and verified email to create and protect your Alagar Automobiles customer account. We do not request access to Gmail, Google Drive or your contacts. Google sign-in does not verify a delivery phone number or link earlier phone orders automatically. Google profile photos are not requested or used.", "Google உள்நுழைவைத் தேர்ந்தெடுத்தால், உங்கள் Alagar Automobiles வாடிக்கையாளர் கணக்கை உருவாக்கவும் பாதுகாக்கவும் Google கணக்கு அடையாளம், பெயர் மற்றும் சரிபார்க்கப்பட்ட மின்னஞ்சலைப் பயன்படுத்துவோம். Gmail, Google Drive அல்லது உங்கள் தொடர்புகளுக்கான அணுகலைக் கோரமாட்டோம். Google உள்நுழைவு டெலிவரி தொலைபேசி எண்ணைச் சரிபார்க்காது; முந்தைய தொலைபேசி ஆர்டர்களையும் தானாக இணைக்காது. Google சுயவிவரப் படங்களைக் கோரவோ பயன்படுத்தவோ மாட்டோம்.")}</p><h2>${t("Browser storage & external services", "உலாவி சேமிப்பு மற்றும் வெளிப்புற சேவைகள்")}</h2><p>${t("Your theme, language, wishlist, cart, recently viewed parts and saved vehicle are stored in this browser. Clearing browser data removes them. WhatsApp and Google Maps open external services, which apply their own privacy terms. Fonts are requested from Google Fonts. Customer and administrator sign-in use secure session cookies. The Google sign-in library loads only on the account page when Google sign-in is available.", "உங்கள் தீம், மொழி, விருப்பப் பட்டியல், கூடை மற்றும் சேமித்த வாகனம் இந்த உலாவியில் சேமிக்கப்படும். உலாவி தரவை அழித்தால் அவை நீக்கப்படும். வாட்ஸ்அப் மற்றும் Google Maps க்கு அவற்றின் தனியுரிமை விதிகள் பொருந்தும்.")}</p><a class="text-link" href="contact.html">${t("Contact Alagar Automobiles", "Alagar Automobiles ஐ தொடர்பு கொள்ளவும்")}${icon("arrow")}</a></article>`,
+        `<article class="panel narrow legal-copy"><h2 id="ordering">${t("Enquiries & ordering", "விசாரணைகள் மற்றும் ஆர்டர்")}</h2><p>${t("Catalogue prices are references from the existing product records. Availability, exact compatibility, delivery costs and final pricing must be confirmed by Alagar Automobiles. Submitting a cart or sending a WhatsApp message is an enquiry and does not confirm a sale. Once your order and final amount are confirmed, available payment options appear with your order. Direct UPI payments are confirmed by Alagar Automobiles after checking its bank account; submitting a transaction reference does not confirm payment.", "பட்டியல் விலைகள் தற்போதைய பதிவுகளின் குறிப்புகள். கிடைக்கும் நிலை, பொருத்தம், டெலிவரி கட்டணம் மற்றும் இறுதி விலையை Alagar Automobiles உறுதி செய்ய வேண்டும். விசாரணை அனுப்புதல் விற்பனையை உறுதி செய்யாது. UPI கட்டணக் குறிப்பைச் சமர்ப்பித்தால் மட்டும் பணம் பெற்றதாகக் கருதப்படாது; தனது வங்கிக் கணக்கில் பணம் வந்ததை Alagar Automobiles உறுதி செய்யும்.")}</p><h2>${t("Returns, refunds & exchanges", "திரும்பப் பெறுதல், பணத்திருப்பம் மற்றும் மாற்றம்")}</h2><p>${t("Contact Alagar Automobiles before placing an order to confirm the applicable return, refund, warranty and exchange terms for your part. No blanket return period or exchange valuation is promised by this website. Old-part exchange enquiries require the team’s review and inspection.", "ஆர்டர் செய்யும் முன் பாகத்திற்கான திரும்பப் பெறுதல், பணத்திருப்பம், உத்தரவாதம் மற்றும் மாற்று விதிகளை Alagar Automobiles உடன் உறுதி செய்யுங்கள். மாற்று விசாரணைகள் குழுவின் ஆய்விற்கு உட்பட்டவை.")}</p><h2 id="privacy">${t("Your information", "உங்கள் தகவல்")}</h2><p>${t("Enquiry forms collect your name, phone number, vehicle/part details and message so Alagar Automobiles can respond. Cart enquiries also collect your delivery preference and address. Do not submit payment credentials or sensitive identity documents. Contact Alagar Automobiles by phone to request correction or deletion of enquiry information.", "விசாரணைக்கு பதிலளிக்க உங்கள் பெயர், கைபேசி எண், வாகனம்/பாகம் விவரங்கள் மற்றும் செய்தி சேகரிக்கப்படும். ஆர்டர் விசாரணைகளில் முகவரியும் பெறப்படும். கட்டண ரகசியங்கள் அல்லது முக்கிய அடையாள ஆவணங்களைச் சமர்ப்பிக்க வேண்டாம்.")}</p><h2 id="google-sign-in">${t("Google sign-in", "Google உள்நுழைவு")}</h2><p>${t("If you choose Google sign-in, we use your Google account identifier, name and verified email to create and protect your Alagar Automobiles customer account. We do not request access to Gmail, Google Drive or your contacts. Google sign-in does not verify a delivery phone number or link earlier phone orders automatically. Google profile photos are not requested or used.", "Google உள்நுழைவைத் தேர்ந்தெடுத்தால், உங்கள் Alagar Automobiles வாடிக்கையாளர் கணக்கை உருவாக்கவும் பாதுகாக்கவும் Google கணக்கு அடையாளம், பெயர் மற்றும் சரிபார்க்கப்பட்ட மின்னஞ்சலைப் பயன்படுத்துவோம். Gmail, Google Drive அல்லது உங்கள் தொடர்புகளுக்கான அணுகலைக் கோரமாட்டோம். Google உள்நுழைவு டெலிவரி தொலைபேசி எண்ணைச் சரிபார்க்காது; முந்தைய தொலைபேசி ஆர்டர்களையும் தானாக இணைக்காது. Google சுயவிவரப் படங்களைக் கோரவோ பயன்படுத்தவோ மாட்டோம்.")}</p><h2>${t("Browser storage & external services", "உலாவி சேமிப்பு மற்றும் வெளிப்புற சேவைகள்")}</h2><p>${t("Your theme, language, wishlist, cart, recently viewed parts and saved vehicle are stored in this browser. Clearing browser data removes them. WhatsApp and Google Maps open external services, which apply their own privacy terms. Fonts are requested from Google Fonts. Customer and administrator sign-in use secure session cookies. The Google sign-in library loads only on the account page when Google sign-in is available.", "உங்கள் தீம், மொழி, விருப்பப் பட்டியல், கூடை மற்றும் சேமித்த வாகனம் இந்த உலாவியில் சேமிக்கப்படும். உலாவி தரவை அழித்தால் அவை நீக்கப்படும். வாட்ஸ்அப் மற்றும் Google Maps க்கு அவற்றின் தனியுரிமை விதிகள் பொருந்தும்.")}</p><a class="text-link" href="contact.html">${t("Contact Alagar Automobiles", "Alagar Automobiles ஐ தொடர்பு கொள்ளவும்")}${icon("arrow")}</a></article>`,
     );
   }
   function renderHelp() {
