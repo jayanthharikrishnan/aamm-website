@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const providers = require('./lib/integrations');
 const googleAuth = require('./lib/google-auth');
+const directUpi = require('./lib/direct-upi');
 const businessConfiguration = require('./config/business.json');
 const sms = require('./lib/sms');
 const { renderBill } = require('./lib/billing');
@@ -62,10 +63,10 @@ async function initialize() {
   const integrity = await get('PRAGMA integrity_check');
   if (Object.values(integrity)[0] !== 'ok') throw new Error('Database integrity check failed; original data retained.');
   const oldVersion = (await get('PRAGMA user_version')).user_version;
-  if (oldVersion < 4) {
+  if (oldVersion < 5) {
     const backupDir = path.join(path.dirname(DB_PATH), 'backups');
     fs.mkdirSync(backupDir, { recursive: true });
-    const backupPath = path.join(backupDir, `alagar-before-v4-${Date.now()}.db`);
+    const backupPath = path.join(backupDir, `alagar-before-v5-${Date.now()}.db`);
     await run('VACUUM INTO ?', [backupPath]);
     // VACUUM INTO produces a consistent snapshot before any migration.
   }
@@ -98,6 +99,8 @@ async function initialize() {
   }
   await run('CREATE TABLE IF NOT EXISTS google_login_challenges (token_hash TEXT PRIMARY KEY,nonce TEXT NOT NULL,expires_at INTEGER NOT NULL)');
   await run('DELETE FROM google_login_challenges WHERE expires_at<?',[Date.now()]);
+  await run(`CREATE TABLE IF NOT EXISTS manual_payments (id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER NOT NULL UNIQUE,amount INTEGER NOT NULL,payee_upi_id TEXT NOT NULL,payee_name TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','submitted','rejected','verified','verified_review_required')),transaction_reference TEXT,submitted_at TEXT,verified_by TEXT,verified_at TEXT,rejection_reason TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await run("CREATE UNIQUE INDEX IF NOT EXISTS manual_payments_verified_reference ON manual_payments(transaction_reference) WHERE status IN ('verified','verified_review_required')");
   await billing.initialize();
   await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL');
   await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_reference ON orders(reference) WHERE reference IS NOT NULL');
@@ -107,7 +110,7 @@ async function initialize() {
   await run('CREATE INDEX IF NOT EXISTS exchanges_status ON exchange_requests(status)');
   await run('CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at)');
   await run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]);
-  await run('PRAGMA user_version = 4');
+  await run('PRAGMA user_version = 5');
 }
 
 app.use((req, res, next) => {
@@ -118,7 +121,7 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy','same-origin-allow-popups');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.razorpay.com https://accounts.google.com/gsi/; frame-src https://api.razorpay.com https://www.google.com https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'");
   if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  if (req.path.startsWith('/admin/') || req.path.startsWith('/auth/') || req.path.startsWith('/users/') || req.path.startsWith('/orders') || req.path.startsWith('/tracking') || req.path.startsWith('/notifications') || req.path === '/me' || req.path.startsWith('/my/') || req.path.startsWith('/bills/') || req.path.startsWith('/billing/')) res.setHeader('Cache-Control', 'no-store');
+  if (req.path.startsWith('/admin/') || req.path.startsWith('/auth/') || req.path.startsWith('/users/') || req.path.startsWith('/orders') || req.path.startsWith('/tracking') || req.path.startsWith('/notifications') || req.path === '/me' || req.path.startsWith('/my/') || req.path.startsWith('/bills/') || req.path.startsWith('/billing/') || req.path.startsWith('/payments/')) res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     const origin = req.get('origin');
     const allowedOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
@@ -274,7 +277,7 @@ async function searchProducts(query = {}) {
 }
 
 app.get('/health', async (req, res) => { await get('SELECT 1'); res.json({ status: 'ok', database: 'ready', persistence_configuration: process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH) ? 'explicit_path_configured' : 'not_verified' }); });
-app.get('/api/config', (req, res) => res.json({ business, google:{configured:googleAuth.configured(),client_id:googleAuth.configured()?googleAuth.clientId():null}, admin:{password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()}, features: { google:googleAuth.configured(), otp: providers.otpConfigured(), payments: providers.paymentsConfigured(), ai: providers.aiConfigured(), image_uploads: false, billing:true, sms:sms.smsConfigured() }, integration_status: { google:googleAuth.configured()?'configured':'not_configured', otp: providers.otpConfigured() ? 'configured' : 'not_configured', payments: providers.paymentsConfigured() ? 'configured' : 'not_configured', ai: providers.aiConfigured() ? 'configured' : 'not_configured', image_uploads: 'not_configured', courier: 'internal_status_updates', notifications: sms.smsConfigured()?'in_app_and_sms_configured':'in_app_only' } }));
+app.get('/api/config', (req, res) => res.json({ business, direct_upi:directUpi.configuration(), google:{configured:googleAuth.configured(),client_id:googleAuth.configured()?googleAuth.clientId():null}, admin:{password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()}, features: { direct_upi:directUpi.configured(), google:googleAuth.configured(), otp: providers.otpConfigured(), payments: providers.paymentsConfigured(), ai: providers.aiConfigured(), image_uploads: false, billing:true, sms:sms.smsConfigured() }, integration_status: { direct_upi:directUpi.configured()?'owner_confirmation':'not_configured', google:googleAuth.configured()?'configured':'not_configured', otp: providers.otpConfigured() ? 'configured' : 'not_configured', payments: providers.paymentsConfigured() ? 'configured' : 'not_configured', ai: providers.aiConfigured() ? 'configured' : 'not_configured', image_uploads: 'not_configured', courier: 'internal_status_updates', notifications: sms.smsConfigured()?'in_app_and_sms_configured':'in_app_only' } }));
 app.get('/products', async (req, res) => res.json(await searchProducts(req.query)));
 app.get('/products/categories', async (req, res) => res.json((await all('SELECT DISTINCT category FROM products WHERE archived=0 AND category IS NOT NULL ORDER BY category')).map(r => r.category)));
 app.get('/products/subcategories', async (req, res) => res.json((await all('SELECT DISTINCT subcategory FROM products WHERE archived=0' + (req.query.category ? ' AND category=?' : '') + ' ORDER BY subcategory', req.query.category ? [clean(req.query.category, 200)] : [])).map(r => r.subcategory)));
@@ -421,7 +424,7 @@ app.post('/billing/guest',rateLimit('guest-billing',30,15*60*1000),async(req,res
   const meta=(await billing.listForOrder(order.id)).find(bill=>bill.kind===kind);if(!meta) throw fail(404,kind==='receipt'?'No verified payment receipt has been issued.':'No commercial invoice has been issued yet.');
   const document=await billing.document(meta.id);res.type('html').send(renderBill(document));
 });
-app.post('/tracking', customer, async (req, res) => { const order = await findOrderReference(req.body.reference); if (!order || !ownsOrder(req,order)) throw fail(404, 'Order not found in your account.'); res.json({ ...orderResponse(order), courier: order.courier, tracking_number: order.tracking_number, estimated_delivery: order.estimated_delivery, tracking_type: 'internal', history: await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [order.id]) }); });
+app.post('/tracking', customer, async (req, res) => { const order = await findOrderReference(req.body.reference); if (!order || !ownsOrder(req,order)) throw fail(404, 'Order not found in your account.'); res.json({ ...orderResponse(order), courier: order.courier, tracking_number: order.tracking_number, estimated_delivery: order.estimated_delivery, tracking_type: 'internal', bills:await billing.listForOrder(order.id), history: await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [order.id]) }); });
 
 async function submitRequest(req, res, table, prefix) {
   const name = clean(req.body.name, 100); const phone = phoneNumber(req.body.phone); const part = clean(req.body.part_name || req.body.part || req.body.partName, 200);
@@ -450,17 +453,99 @@ app.post('/assistant', rateLimit('assistant', 30, 15 * 60 * 1000), async (req, r
 
 // Razorpay checkout is available only for authenticated customers and business-confirmed
 // orders with recorded inventory. Browser callbacks alone never confirm a payment.
+// Direct UPI routes never claim that opening an app or submitting a UTR proves
+// payment. Only the signed-in owner can attest to the actual matching bank credit.
+async function authorizedUpiOrder(req) {
+  if(req.session) {
+    const order=await findOrderReference(req.body.reference);
+    if(order&&ownsOrder(req,order)) return order;
+    if(!req.body.token) throw fail(404,'Order not found in your account.');
+  }
+  if(!req.body.token) throw fail(401,'Sign in or use the private tracking token from your order receipt.');
+  return authorizedGuestOrder(req.body.reference,req.body.token);
+}
+const upiReadyStatuses=new Set(['Order Confirmed','Processing','Packed','Shipped','Out for Delivery','Delivered','Payment Pending']);
+function upiItems(order) {
+  let items;try{items=JSON.parse(order.items||'[]');}catch{throw fail(409,'Review the order items before payment.');}
+  if(!Array.isArray(items)||!items.length||items.some(item=>!Number.isSafeInteger(item.id)||!Number.isSafeInteger(item.qty)||item.qty<1)) throw fail(409,'Review the order items before payment.');
+  return items;
+}
+async function upiInventoryAvailable(order) {
+  for(const item of upiItems(order)) {
+    const product=await get('SELECT stock_quantity,archived FROM products WHERE id=?',[item.id]);
+    if(!product||product.archived||product.stock_quantity==null||product.stock_quantity<item.qty) return false;
+  }
+  return true;
+}
+async function noProviderAttempt(order) {
+  if(await get('SELECT id FROM payments WHERE order_id=? LIMIT 1',[order.id])) throw fail(409,'This order already has a payment-provider attempt. Contact Alagar Automobiles before changing the payment method.');
+}
+async function upiInvoice(order) {
+  let invoice=await get("SELECT * FROM billing_documents WHERE order_id=? AND kind='invoice'",[order.id]);
+  if(!invoice) { await billing.issueInvoice(order);invoice=await get("SELECT * FROM billing_documents WHERE order_id=? AND kind='invoice'",[order.id]); }
+  if(!invoice||!Number.isSafeInteger(invoice.total_paise)||invoice.total_paise<=0||invoice.total_paise!==billing.paise(order.total)) throw fail(409,'Review the final invoice total before payment.');
+  return invoice;
+}
+function publicUpiClaim(row) {
+  return row?{id:row.id,status:row.status,transaction_reference:row.transaction_reference||null,amount:row.amount,submitted_at:row.submitted_at,verified_at:row.verified_at,rejection_reason:row.rejection_reason||null}:null;
+}
+async function ensureUpiIntent(order) {
+  await noProviderAttempt(order);
+  if(!upiReadyStatuses.has(order.status)) throw fail(409,'Alagar Automobiles must confirm the order and final delivery charge before payment.');
+  const invoice=await upiInvoice(order);
+  let payment=await get('SELECT * FROM manual_payments WHERE order_id=?',[order.id]);
+  if(payment) {
+    if(payment.amount!==invoice.total_paise) throw fail(409,'The stored payment amount does not match the invoice. Contact Alagar Automobiles.');
+    return payment;
+  }
+  if(!await upiInventoryAvailable(order)) throw fail(409,'Alagar Automobiles must confirm sufficient inventory before accepting payment.');
+  if(await get("SELECT id FROM billing_documents WHERE order_id=? AND kind='receipt'",[order.id])) throw fail(409,'A payment has already been recorded for this order.');
+  await run('INSERT INTO manual_payments(order_id,amount,payee_upi_id,payee_name) VALUES (?,?,?,?)',[order.id,invoice.total_paise,directUpi.payeeId(),directUpi.payeeName()]);
+  await run("UPDATE orders SET payment_status='manual_pending' WHERE id=?",[order.id]);
+  return get('SELECT * FROM manual_payments WHERE order_id=?',[order.id]);
+}
+app.post('/payments/upi/details',submissionLimit,async(req,res)=>{
+  if(!directUpi.configured()) throw fail(503,'Direct UPI payments are not configured. Please contact Alagar Automobiles.');
+  const payload=await transaction(async()=>{
+    const order=await authorizedUpiOrder(req);
+    const payment=await ensureUpiIntent(order);
+    if(!['verified','verified_review_required','submitted'].includes(payment.status)&&!await upiInventoryAvailable(order)) throw fail(409,'Alagar Automobiles must confirm sufficient inventory before accepting payment.');
+    return {reference:displayReference(order.reference),amount:payment.amount,currency:'INR',payment_status:payment.status==='pending'?'manual_pending':`manual_${payment.status}`,claim:publicUpiClaim(payment),...(await directUpi.intent({amount:payment.amount,reference:displayReference(order.reference),upiId:payment.payee_upi_id,name:payment.payee_name}))};
+  });
+  res.json(payload);
+});
+app.post('/payments/upi/submit',submissionLimit,async(req,res)=>{
+  if(!directUpi.configured()) throw fail(503,'Direct UPI payments are not configured.');
+  const reference=String(req.body.transaction_reference||'').trim();
+  if(!/^\d{12}$/.test(reference)) throw fail(400,'Enter the 12-digit UPI transaction reference from your payment app.');
+  const payload=await transaction(async()=>{
+    const order=await authorizedUpiOrder(req);
+    const payment=await ensureUpiIntent(order);
+    if(['verified','verified_review_required'].includes(payment.status)) throw fail(409,'Payment has already been confirmed for this order.');
+    if(payment.status!=='submitted'||payment.transaction_reference!==reference) {
+      await run("UPDATE manual_payments SET status='submitted',transaction_reference=?,submitted_at=CURRENT_TIMESTAMP,rejection_reason=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",[reference,payment.id]);
+      await run("UPDATE orders SET payment_status='manual_submitted' WHERE id=?",[order.id]);
+      await audit(req,'upi_reference_submitted','order',order.id,{previous_reference:payment.transaction_reference||null,transaction_reference:reference,verification:'unverified_customer_claim'});
+      await notify(order.phone,'UPI payment awaiting review','Your transaction reference was submitted. Alagar Automobiles will check the actual bank credit before confirming payment.',order.reference);
+    }
+    return {reference:displayReference(order.reference),payment_status:'manual_submitted',claim:publicUpiClaim(await get('SELECT * FROM manual_payments WHERE id=?',[payment.id]))};
+  });
+  res.json(payload);
+});
+
 app.post('/payments/create', customer, async (req, res) => { const payload=await transaction(async () => {
   if (!providers.paymentsConfigured()) throw fail(503, 'Online payments are not configured. Please contact Alagar Automobiles.');
   const order = await findOrderReference(req.body.reference);
   if (!order || !ownsOrder(req,order)) throw fail(404, 'Order not found in your account.');
+  if (await get('SELECT id FROM manual_payments WHERE order_id=?',[order.id])) throw fail(409,'This order uses direct UPI. Contact Alagar Automobiles before changing its payment method.');
   if (order.status !== 'Order Confirmed') throw fail(409, 'Alagar Automobiles must confirm the order and final price before payment.');
   if (!/pickup|collect/i.test(order.delivery)) throw fail(409, 'Online payment currently supports store pickup; delivery charges require Alagar Automobiles confirmation.');
-  const existing = await get("SELECT * FROM payments WHERE order_id=? AND status IN ('created','captured','captured_review_required') ORDER BY id DESC LIMIT 1", [order.id]);
+  const existing = await get("SELECT * FROM payments WHERE order_id=? ORDER BY id DESC LIMIT 1", [order.id]);
   if (existing) {
     if (existing.status !== 'created') throw fail(409, 'A payment has already been recorded for this order.');
     return { key_id: process.env.RAZORPAY_KEY_ID, order_id: existing.provider_order_id, amount: existing.amount, currency: 'INR', reference: displayReference(order.reference) };
   }
+  if(await get("SELECT id FROM billing_documents WHERE order_id=? AND kind='receipt'",[order.id])) throw fail(409,'A payment receipt already exists for this order. Create a new order for another purchase.');
   const items = JSON.parse(order.items || '[]');
   const cart = await validateCart(items);
   if (cart.total !== order.total || !cart.total) throw fail(409, 'The catalogue price changed. Ask Alagar Automobiles to confirm an updated order.');
@@ -479,6 +564,7 @@ async function recordCapturedPayment(payment, providerPayment) {
     if (current.status !== 'created') throw fail(409, 'This payment cannot be captured in its current state.');
     const order = await get('SELECT * FROM orders WHERE id=?', [current.order_id]);
     if (providerPayment.order_id !== current.provider_order_id || providerPayment.amount !== current.amount || providerPayment.currency !== 'INR' || providerPayment.status !== 'captured' || providerPayment.captured !== true) throw fail(409, 'Payment has not been captured for the expected amount.');
+    if (await get("SELECT id FROM manual_payments WHERE order_id=? AND status IN ('verified','verified_review_required')",[order.id]) || await get("SELECT id FROM billing_documents WHERE order_id=? AND kind='receipt'",[order.id])) throw fail(409,'Another payment has already been recorded for this order; review the received funds before reconciliation.');
     const items = JSON.parse(order.items || '[]');
     let inventoryAvailable = true;
     for (const item of items) { const product = await get('SELECT stock_quantity,archived FROM products WHERE id=?', [item.id]); if (!product || product.archived || product.stock_quantity == null || product.stock_quantity < item.qty) inventoryAvailable = false; }
@@ -528,7 +614,65 @@ app.use('/admin', admin);
 app.get('/admin/setup',async(req,res)=>{
   const missing=names=>names.filter(name=>!process.env[name]?.trim());
   const smsMissing=missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN']);if(!process.env.TWILIO_FROM_NUMBER&&!process.env.TWILIO_MESSAGING_SERVICE_SID) smsMissing.push('TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID');
-  res.json({admin:{id_configured:Boolean(adminId()),phone_configured:Boolean(adminPhone()),password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()},services:{google:{configured:googleAuth.configured(),missing:googleAuth.configured()?[]:['GOOGLE_CLIENT_ID']},otp:{configured:providers.otpConfigured(),missing:missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_VERIFY_SERVICE_SID'])},sms:{configured:sms.smsConfigured(),missing:smsMissing},payments:{configured:providers.paymentsConfigured(),missing:missing(['RAZORPAY_KEY_ID','RAZORPAY_KEY_SECRET','RAZORPAY_WEBHOOK_SECRET'])},ai:{configured:providers.aiConfigured(),missing:missing(['OPENAI_API_KEY'])}},billing:{enabled:true,invoice_type:'commercial_invoice',tax_invoice:false},storage:{explicit_path_configured:Boolean(process.env.DB_PATH&&path.isAbsolute(process.env.DB_PATH)),production:process.env.NODE_ENV==='production',persistence_verified:false}});
+  res.json({admin:{id_configured:Boolean(adminId()),phone_configured:Boolean(adminPhone()),password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()},services:{direct_upi:{...directUpi.configuration(),missing:directUpi.configured()?[]:['UPI_ID']},google:{configured:googleAuth.configured(),missing:googleAuth.configured()?[]:['GOOGLE_CLIENT_ID']},otp:{configured:providers.otpConfigured(),missing:missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_VERIFY_SERVICE_SID'])},sms:{configured:sms.smsConfigured(),missing:smsMissing},payments:{configured:providers.paymentsConfigured(),missing:missing(['RAZORPAY_KEY_ID','RAZORPAY_KEY_SECRET','RAZORPAY_WEBHOOK_SECRET'])},ai:{configured:providers.aiConfigured(),missing:missing(['OPENAI_API_KEY'])}},billing:{enabled:true,invoice_type:'commercial_invoice',tax_invoice:false},storage:{explicit_path_configured:Boolean(process.env.DB_PATH&&path.isAbsolute(process.env.DB_PATH)),production:process.env.NODE_ENV==='production',persistence_verified:false}});
+});
+app.post('/admin/orders/:id/upi/confirm',async(req,res)=>{
+  if(req.body.received!==true) throw fail(400,'Confirm that you checked the actual matching credit in your bank account.');
+  const reference=String(req.body.transaction_reference||'').trim();
+  if(!/^\d{12}$/.test(reference)) throw fail(400,'Enter the actual 12-digit bank transaction reference.');
+  const amount=req.body.amount;
+  if(!Number.isSafeInteger(amount)||amount<=0) throw fail(400,'Enter the exact received amount in paise.');
+  const result=await transaction(async()=>{
+    const order=await get('SELECT * FROM orders WHERE id=?',[req.params.id]);
+    if(!order) throw fail(404,'Order not found.');
+    await noProviderAttempt(order);
+    const payment=await get('SELECT * FROM manual_payments WHERE order_id=?',[order.id]);
+    if(!payment) throw fail(409,'No direct UPI payment reference has been submitted for this order.');
+    const invoice=await get("SELECT * FROM billing_documents WHERE order_id=? AND kind='invoice'",[order.id]);
+    if(!invoice||amount!==payment.amount||amount!==invoice.total_paise) throw fail(409,'The received amount must exactly match the immutable invoice total.');
+    if(['verified','verified_review_required'].includes(payment.status)) {
+      if(payment.transaction_reference!==reference) throw fail(409,'A different payment has already been confirmed for this order.');
+      return {ok:true,payment_status:`manual_${payment.status}`,claim:publicUpiClaim(payment),receipt:(await billing.listForOrder(order.id)).find(bill=>bill.kind==='receipt'),idempotent:true};
+    }
+    if(payment.status!=='submitted') throw fail(409,'A submitted payment reference is required before confirming receipt.');
+    if(await get("SELECT id FROM billing_documents WHERE order_id=? AND kind='receipt'",[order.id])) throw fail(409,'A receipt has already been issued for this order.');
+    const duplicate=await get("SELECT order_id FROM manual_payments WHERE transaction_reference=? AND status IN ('verified','verified_review_required') AND order_id<>?",[reference,order.id]);
+    if(duplicate) throw fail(409,'This bank transaction reference has already been recorded against another order.');
+    const inventoryAvailable=upiReadyStatuses.has(order.status)&&await upiInventoryAvailable(order);
+    const status=inventoryAvailable?'verified':'verified_review_required';
+    const verifiedAt=new Date().toISOString();
+    await run('UPDATE manual_payments SET status=?,transaction_reference=?,verified_by=?,verified_at=?,rejection_reason=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?',[status,reference,req.session.phone,verifiedAt,payment.id]);
+    const confirmed={...payment,status,transaction_reference:reference,verified_by:req.session.phone,verified_at:verifiedAt};
+    const receipt=await billing.issueManualReceipt(order,confirmed);
+    if(inventoryAvailable) for(const item of upiItems(order)) {
+      const product=await get('SELECT stock_quantity FROM products WHERE id=?',[item.id]);
+      const updated=await run('UPDATE products SET stock_quantity=stock_quantity-? WHERE id=? AND stock_quantity>=?',[item.qty,item.id,item.qty]);
+      if(updated.changes!==1) throw fail(409,'Inventory changed while confirming payment. Please review this order.');
+      await run('INSERT INTO stock_movements(product_id,previous_quantity,new_quantity,reason,actor) VALUES (?,?,?,?,?)',[item.id,product.stock_quantity,product.stock_quantity-item.qty,'Direct UPI receipt confirmed by owner',req.session.phone]);
+      await run('INSERT INTO sales(product_id,qty) VALUES (?,?)',[item.id,item.qty]);
+    }
+    await run('UPDATE orders SET payment_status=? WHERE id=?',[`manual_${status}`,order.id]);
+    await audit(req,'upi_bank_receipt_confirmed','order',order.id,{amount,transaction_reference:reference,submitted_reference:payment.transaction_reference,verification:'owner_bank_check',inventory_status:inventoryAvailable?'recorded':'review_required',receipt_number:receipt.number});
+    await notify(order.phone,inventoryAvailable?'UPI payment confirmed by owner':'UPI received; order needs review',inventoryAvailable?'Alagar Automobiles has checked and confirmed receipt of your UPI payment.':'Alagar Automobiles confirmed receipt of your UPI payment. Inventory or order status changed; the owner must arrange fulfillment or a refund.',order.reference);
+    return {ok:true,payment_status:`manual_${status}`,claim:publicUpiClaim(confirmed),receipt};
+  });
+  res.json(result);
+});
+app.post('/admin/orders/:id/upi/reject',async(req,res)=>{
+  const reason=clean(req.body.reason,500);
+  if(reason.length<3) throw fail(400,'Enter why this payment reference could not be confirmed.');
+  const result=await transaction(async()=>{
+    const order=await get('SELECT * FROM orders WHERE id=?',[req.params.id]);
+    if(!order) throw fail(404,'Order not found.');
+    const payment=await get('SELECT * FROM manual_payments WHERE order_id=?',[order.id]);
+    if(!payment||payment.status!=='submitted') throw fail(409,'Only a submitted, unconfirmed payment reference can be rejected.');
+    await run("UPDATE manual_payments SET status='rejected',rejection_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[reason,payment.id]);
+    await run("UPDATE orders SET payment_status='manual_rejected' WHERE id=?",[order.id]);
+    await audit(req,'upi_reference_rejected','order',order.id,{transaction_reference:payment.transaction_reference,reason});
+    await notify(order.phone,'UPI payment reference needs attention','Alagar Automobiles could not confirm this payment reference. Check your payment app or contact the owner; do not send another payment without checking.',order.reference);
+    return {ok:true,payment_status:'manual_rejected',claim:publicUpiClaim({...payment,status:'rejected',rejection_reason:reason})};
+  });
+  res.json(result);
 });
 app.get('/admin/bills',async(req,res)=>res.json(await billing.list()));
 app.post('/admin/orders/:id/invoice',async(req,res)=>{const document=await transaction(async()=>{const order=await get('SELECT * FROM orders WHERE id=?',[req.params.id]);if(!order) throw fail(404,'Order not found.');const bill=await billing.issueInvoice(order);if(bill.created)await audit(req,'invoice_issued','order',order.id,{number:bill.number});return bill;});res.status(document.created?201:200).json(document);});
@@ -544,10 +688,10 @@ app.post('/admin/payments/:id/refund', async (req,res) => {
 });
 app.get('/admin/overview', async (req, res) => {
   const count = async (table, where = '') => (await get(`SELECT COUNT(*) AS count FROM ${table} ${where}`)).count;
-  res.json({ products: await count('products', 'WHERE archived=0'), customers: await count('users'), orders: await count('orders'), verified_revenue: (await get("SELECT COALESCE(SUM(amount),0)/100.0 AS revenue FROM payments WHERE status='captured'")).revenue, pending_orders: await count('orders', "WHERE status NOT IN ('Delivered','Cancelled','Refunded','Returned')"), completed_orders: await count('orders', "WHERE status='Delivered'"), low_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity BETWEEN 1 AND 5'), out_of_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity=0'), pending_enquiries: await count('enquiries', "WHERE status!='Closed'"), pending_exchanges: await count('exchange_requests', "WHERE status NOT IN ('Exchange Completed','Rejected')"), inventory_configured: (await count('products','WHERE stock_quantity IS NOT NULL')) > 0 });
+  res.json({ products: await count('products', 'WHERE archived=0'), customers: await count('users'), orders: await count('orders'), verified_revenue: (await get("SELECT ((SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='captured')+(SELECT COALESCE(SUM(amount),0) FROM manual_payments WHERE status IN ('verified','verified_review_required')))/100.0 AS revenue")).revenue, pending_orders: await count('orders', "WHERE status NOT IN ('Delivered','Cancelled','Refunded','Returned')"), completed_orders: await count('orders', "WHERE status='Delivered'"), low_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity BETWEEN 1 AND 5'), out_of_stock_products: await count('products', 'WHERE archived=0 AND stock_quantity=0'), pending_enquiries: await count('enquiries', "WHERE status!='Closed'"), pending_exchanges: await count('exchange_requests', "WHERE status NOT IN ('Exchange Completed','Rejected')"), inventory_configured: (await count('products','WHERE stock_quantity IS NOT NULL')) > 0 });
 });
 app.get('/admin/products', async (req, res) => res.json(await searchProducts()));
-app.get('/admin/orders', async (req, res) => res.json((await all('SELECT * FROM orders ORDER BY id DESC LIMIT 1000')).map(r => { const { tracking_token_hash,...safe }=r; return { ...safe, reference:displayReference(safe.reference),items: JSON.parse(r.items || '[]') }; })));
+app.get('/admin/orders', async (req, res) => { const rows=await all('SELECT * FROM orders ORDER BY id DESC LIMIT 1000');const manual=await all('SELECT * FROM manual_payments');const byOrder=new Map(manual.map(row=>[row.order_id,row]));res.json(rows.map(r => { const { tracking_token_hash,...safe }=r; return { ...safe, reference:displayReference(safe.reference),items:JSON.parse(r.items||'[]'),manual_payment:byOrder.get(r.id)||null }; })); });
 app.get('/admin/enquiries', async (req, res) => res.json(await all('SELECT * FROM enquiries ORDER BY id DESC LIMIT 1000')));
 app.get('/admin/exchanges', async (req, res) => res.json(await all('SELECT * FROM exchange_requests ORDER BY id DESC LIMIT 1000')));
 app.get('/admin/customers', async (req, res) => res.json((await all('SELECT id,phone,name,email,address,delivery_pref FROM users ORDER BY id DESC LIMIT 1000'))));

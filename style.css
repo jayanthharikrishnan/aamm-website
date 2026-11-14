@@ -3008,3 +3008,64 @@ html[lang="ta"] .primary-nav {
   .product-card-actions { gap: 6px; }
   .product-primary-actions .quantity { flex: 0 0 auto; }
 }
+
+/* Direct UPI shows one payment step at a time; bank receipt is checked by staff. */
+.upi-pay-button { margin-top: 8px; }
+.upi-order-status {
+  max-width: 350px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.upi-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 32px);
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  overflow-y: auto;
+}
+.upi-dialog::backdrop { background: #0009; }
+.upi-dialog-header,
+.upi-dialog-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.upi-dialog-header { margin-bottom: 22px; }
+.upi-dialog-header h2 { margin: 0; font-size: 21px; font-weight: 500; }
+.upi-dialog-controls { flex-shrink: 0; gap: 5px; }
+.upi-dialog-controls .icon-button { width: 36px; height: 36px; }
+.upi-payment-content { min-width: 0; }
+.upi-payment-content > p { margin: 12px 0; }
+.upi-payment-reference { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.upi-payment-total { font-size: 34px; font-weight: 550; line-height: 1.3; letter-spacing: -.04em; }
+.upi-payee { font-size: 13px; }
+.upi-id { overflow-wrap: anywhere; font-size: 13px; }
+.upi-payment-actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 20px 0 16px; }
+.upi-payment-actions .button { flex: 1 1 160px; min-height: 44px; padding: 11px 14px; }
+.upi-qr-option { margin: 16px 0 20px; }
+.upi-qr-option summary { min-height: 36px; font-size: 12px; cursor: pointer; color: var(--muted); }
+.upi-qr { display: block; max-width: 100%; height: auto; margin: 12px auto; background: #fff; }
+.upi-payment-help { display: block; font-size: 11px; color: var(--muted); line-height: 1.8; }
+#upiPaymentForm { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+#upiPaymentForm .field { margin-bottom: 6px; }
+#upiPaymentForm .error { font-size: 12px; }
+#upiPaymentForm .error:empty { display: none; }
+#upiPaymentForm > button { margin-top: 16px; min-height: 44px; }
+.upi-confirmation-status { line-height: 1.8; font-size: 16px; }
+.upi-dialog .notice { font-size: 12px; }
+@media (max-width: 400px) {
+  .upi-dialog { padding: 18px; }
+  .upi-dialog-header { align-items: flex-start; gap: 8px; }
+  .upi-dialog-header h2 { font-size: 18px; }
+  .upi-dialog-controls .language-switch { min-width: 49px; font-size: 10px; padding: 6px; }
+  .upi-dialog-controls .icon-button { width: 30px; height: 30px; }
+  .upi-payment-total { font-size: 30px; }
+}

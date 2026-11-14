@@ -13,10 +13,10 @@ This document compares the implementation in this repository with the owner's 30
 - A working administrator interface for products, recorded brand/category fields, inventory and stock movements, orders and internal status updates, customers, enquiry quotations, exchange valuations, notifications, activity logs and provider configuration status.
 - Real optional OpenAI assistance grounded in retrieved catalogue rows. With no AI key, the same interface explicitly identifies its response as catalogue search.
 - Optional Razorpay order creation, browser checkout, backend signature and captured-payment verification, signed webhooks, idempotent stock/sales updates and a protected full-refund API. These require merchant credentials and the eligibility checks described below.
-- Immutable commercial invoices are issued for reviewed/confirmed orders with known delivery charges; payment receipts require actual captured payment verification. Authenticated owners and guest receipt-secret holders have protected printing paths. There is no subscription billing or invented GST registration.
+- Immutable commercial invoices are issued for reviewed/confirmed orders with known delivery charges; payment receipts require actual provider capture verification or separately labelled owner-confirmed direct-UPI bank credit. Authenticated owners and guest receipt-secret holders have protected printing paths. There is no subscription billing or invented GST registration.
 - Optional provider-backed transactional SMS has an outbox and actual provider status records, separate from Verify OTP; absent credentials preserve the in-app record without claiming external delivery.
 - On-demand component guides show a generic educational assembly for supported catalogue types, with play/pause/replay, Tamil and reduced-motion states. The mapping covers 94 of the preserved 137 catalogue records; the remaining 43 direct customers to the team instead of guessing.
-- Additive SQLite initialization/migration, an automatic pre-v3 backup, integrity checks and preservation of the supplied database and existing identifiers. Local tests use disposable copies.
+- Additive SQLite initialization/migration, an automatic pre-v5 backup, integrity checks and preservation of the supplied database and existing identifiers. Local tests use disposable copies.
 
 ## Comparison with the master brief
 
@@ -53,7 +53,7 @@ This document compares the implementation in this repository with the owner's 30
 | 29. Deliverables | Updated source, inline schema/migrations, environment template, audit, API documentation, deployment instructions, feature-status report and reproducible test entry points are included. The verified development backup is outside the web root; a current production backup must be made separately. |
 | 30. Acceptance criteria | Core source workflows have development checks. Full acceptance still depends on business data completion, provider testing, remaining workflows and verified persistent production deployment. |
 
-## Payment limits that affect operation
+## Razorpay payment limits
 
 Online payment initiation requires configured Razorpay credentials, a signed-in owner/admin, a business-confirmed order, store pickup, known sufficient inventory and unchanged catalogue prices. Unconfirmed delivery costs are never silently treated as free delivery.
 
@@ -98,3 +98,9 @@ npm run test:browser
 Google Identity Services sign-in is implemented with the official server verifier, strict audience/issuer/expiry checks and a single-use cookie-bound nonce. Accounts are keyed by verified Google subject, with no automatic linking by email or delivery phone. New customer records use stable account ownership across orders, requests, bills, notifications, tracking and payments. Administrator authentication remains separate. Live Google account sign-in must also satisfy the business OAuth client's actual origin and branding settings; protocol tests use temporary signed fixtures.
 
 Buy now on priced parts opens a single-product checkout using current catalogue data and preserves the existing cart. Unknown prices lead to a quotation request, and known out-of-stock parts cannot be purchased. No unverified payment is represented as successful.
+
+## Direct UPI update
+
+The shop can configure its receiving VPA through `UPI_ID` and optional `UPI_PAYEE_NAME`. Authorized customers receive an exact-invoice-amount QR/UPI link, then submit a 12-digit transaction reference for review. Administrator confirmation requires checking the actual bank credit and matching amount/reference; submission alone never means paid. The receipt identifies owner-confirmed bank credit, not automatic provider verification.
+
+The manual route uses existing order ownership, guest receipt secrets, immutable invoices, audit records and stock/sales bookkeeping. Changed inventory requires staff review. Razorpay remains optional; its provider verification/refunds are separate from direct UPI. Live transfers and bank reconciliation have not been tested by the development checks. The current free Render service still needs durable storage for reliable payment history.
