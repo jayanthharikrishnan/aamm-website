@@ -2,7 +2,7 @@
 
 ## Local installation
 
-Use a supported Node.js LTS release (Node 22 or 24) and npm. SQLite's native module must install successfully on the target OS.
+Use Node.js 24 LTS and npm. The bounded package engine keeps Render on the same major version used for validation. The postinstall step rebuilds SQLite from source on the deployment host, using Python, make and a C/C++ compiler. This avoids prebuilt native binaries that require a newer glibc than the runtime provides; the native module must load successfully before the deployment is accepted.
 
 ```sh
 npm ci

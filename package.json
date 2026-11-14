@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test test/*.test.js",
-    "test:browser": "node test/frontend-browser.cjs && node test/account-provider-ui.cjs && node test/google-login-ui.cjs && node test/part-location-browser.cjs && node test/buy-now-browser.cjs && node test/direct-upi-browser.cjs && node test/direct-upi-admin.cjs && node test/direct-upi-e2e.cjs"
+    "test:browser": "node test/frontend-browser.cjs && node test/account-provider-ui.cjs && node test/google-login-ui.cjs && node test/part-location-browser.cjs && node test/buy-now-browser.cjs && node test/direct-upi-browser.cjs && node test/direct-upi-admin.cjs && node test/direct-upi-e2e.cjs",
+    "postinstall": "npm rebuild sqlite3 --build-from-source"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,6 @@
     "sqlite3": "^6.0.1"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24 <25"
   }
 }
