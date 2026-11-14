@@ -837,6 +837,10 @@
   }
   let googleIdentityPromise = null;
   let googleSignInGeneration = 0;
+  let googleButtonCleanup = null;
+  function clearGoogleButtonObservers() {
+    if (googleButtonCleanup) googleButtonCleanup();
+  }
   function loadGoogleIdentity() {
     if (window.google?.accounts?.id) return Promise.resolve(window.google.accounts.id);
     if (googleIdentityPromise) return googleIdentityPromise;
@@ -863,6 +867,7 @@
     return googleIdentityPromise;
   }
   async function mountGoogleSignIn(keepError = false) {
+    clearGoogleButtonObservers();
     const host = $('#googleButton');
     const status = $('#googleStatus');
     const error = $('#googleError');
@@ -901,6 +906,7 @@
             const approved = await api('/auth/google', { method: 'POST', body: JSON.stringify({ credential: response.credential }) });
             if (!approved.user) throw new Error(t('Sign-in could not be completed. Please try again.', 'உள்நுழைவை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'));
             if (!host.isConnected || generation !== googleSignInGeneration) return;
+            clearGoogleButtonObservers();
             googleSignInGeneration++;
             toast(t('Signed in securely', 'பாதுகாப்பாக உள்நுழைந்துள்ளீர்கள்'));
             await renderCustomerDashboard(approved.user);
@@ -913,20 +919,55 @@
           }
         },
       });
-      identity.renderButton(host, {
-        type: 'standard',
-        theme: document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline',
-        size: 'large',
-        text: 'continue_with',
-        shape: 'rectangular',
-        logo_alignment: 'left',
-        locale: language === 'ta' ? 'ta' : 'en',
-        width: Math.min(340, Math.max(200, Math.floor(host.clientWidth || 280))),
+      let renderedWidth = 0;
+      let resizeFrame = 0;
+      const resizeObserver = new ResizeObserver(() => {
+        if (resizeFrame) return;
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          try { renderButton(); }
+          catch (failure) {
+            cleanup();
+            if (host.isConnected) { error.textContent = failure.message; retry.hidden = false; }
+          }
+        });
       });
+      const removalObserver = new MutationObserver(() => {
+        if (!host.isConnected) cleanup();
+      });
+      const cleanup = () => {
+        resizeObserver.disconnect();
+        removalObserver.disconnect();
+        if (resizeFrame) cancelAnimationFrame(resizeFrame);
+        resizeFrame = 0;
+        if (googleButtonCleanup === cleanup) googleButtonCleanup = null;
+      };
+      const renderButton = () => {
+        if (!host.isConnected || generation !== googleSignInGeneration) { cleanup(); return; }
+        const width = Math.min(340, Math.floor(host.clientWidth));
+        if (width < 1 || width === renderedWidth) return;
+        renderedWidth = width;
+        host.replaceChildren();
+        identity.renderButton(host, {
+          type: 'standard',
+          theme: document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+          locale: language === 'ta' ? 'ta' : 'en',
+          width,
+        });
+      };
+      googleButtonCleanup = cleanup;
+      renderButton();
+      resizeObserver.observe(host);
+      removalObserver.observe(document.body, { childList: true, subtree: true });
       host.setAttribute('aria-busy', 'false');
       status.textContent = '';
     } catch (failure) {
       if (!host.isConnected || generation !== googleSignInGeneration) return;
+      clearGoogleButtonObservers();
       host.setAttribute('aria-busy', 'false');
       status.textContent = '';
       error.textContent = failure.message;
@@ -934,6 +975,7 @@
     }
   }
   async function renderAccount() {
+    clearGoogleButtonObservers();
     googleSignInGeneration++;
     let session = null;
     try { session = await api('/auth/me'); } catch {}

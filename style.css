@@ -2899,6 +2899,11 @@ html[lang="ta"] .primary-nav {
 }
 
 /* Account sign-in stays focused on the official Google control. */
+.account-signin-layout,
+.account-signin,
+.account-saved,
+.google-signin,
+.google-button-host { min-width: 0; }
 .account-signin-layout {
   display: grid;
   grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
