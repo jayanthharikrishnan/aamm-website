@@ -104,3 +104,10 @@ When configured, application events enqueue a persistent SMS outbox entry in the
 New references use `AA-`. Existing database references remain unchanged; an `AA-` display alias can resolve an old `AAMM-` record only if no exact current reference exists. Receipts, invoices and outgoing message branding display Alagar Automobiles.
 
 Transactional SMS is restricted to customer phones verified by the legitimate OTP provider. Unauthenticated guest form submissions do not enqueue SMS; they retain the in-app record and private guest receipt. Staff-confirmed order/invoice updates and verified-payment updates can enqueue SMS for a verified customer once the sender is configured. This avoids sending paid messages to arbitrary numbers submitted through public forms.
+
+## Google customer identity (schema v4)
+
+- `POST /auth/google/challenge` issues `{nonce, expires_in:300}` with a private HttpOnly SameSite challenge cookie. `POST /auth/google` accepts `{credential}` and consumes that browser-bound challenge before verifying the official Google ID token. A real Web client ID is required in `GOOGLE_CLIENT_ID`; no client secret is used.
+- `GET /auth/me` retains `{user,isAdmin}`. `GET /me` / `PUT /me` operate on the authenticated profile. A Google customer has no verified phone identity; `contact_phone` is editable delivery contact only, and the verified Google email is read-only.
+- `GET /my/orders`, `/my/requests`, `/my/bills` and `/notifications` enforce stable customer ownership. Owned tracking, bill printing and payments use the same authorization. Legacy phone routes require an actually phone-verified session or an administrator. An entered phone/email never merges accounts.
+- Original data and IDs remain intact; v4 uses additive identity/ownership columns and expiring one-use challenge records.

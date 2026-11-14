@@ -221,7 +221,21 @@
   }
   function productCard(p) {
     const saved = wishes().includes(p.id);
-    return `<article class="product-card"><div class="product-visual"><a href="product.html?id=${p.id}" aria-label="${esc(name(p))}" style="position:absolute;inset:0;display:grid;place-items:center">${placeholder()}</a><span class="product-label">${esc(p.subcategory || t("Spare part", "உதிரிபாகம்"))}</span><button class="icon-button wish-button ${saved ? "saved" : ""}" data-wish="${p.id}" aria-label="${saved ? "Remove from" : "Add to"} wishlist: ${esc(name(p))}" aria-pressed="${saved}">${icon("heart")}</button></div><div class="product-info"><div class="product-category">${esc(p.category)}</div><h3><a href="product.html?id=${p.id}">${esc(name(p))}</a></h3><div class="product-vehicle">${icon("car")}${esc(p.vehicle || t("Ask about fitment", "பொருத்தம் பற்றி கேளுங்கள்"))}</div><div class="product-bottom"><div class="product-price">${money(p.price)}<small>${p.stock_quantity == null ? t("Availability on enquiry", "விசாரித்து கிடைப்பை அறியவும்") : p.stock_quantity === 0 ? t("Out of stock", "இருப்பில் இல்லை") : t("In stock", "இருப்பில் உள்ளது")}</small></div><button class="add-button" data-add="${p.id}" aria-label="Add ${esc(name(p))} to cart">${icon("plus")}</button></div></div></article>`;
+    return `<article class="product-card"><div class="product-visual"><a href="product.html?id=${p.id}" aria-label="${esc(name(p))}" style="position:absolute;inset:0;display:grid;place-items:center">${placeholder()}</a><span class="product-label">${esc(p.subcategory || t("Spare part", "உதிரிபாகம்"))}</span><button class="icon-button wish-button ${saved ? "saved" : ""}" data-wish="${p.id}" aria-label="${saved ? "Remove from" : "Add to"} wishlist: ${esc(name(p))}" aria-pressed="${saved}">${icon("heart")}</button></div><div class="product-info"><div class="product-category">${esc(p.category)}</div><h3><a href="product.html?id=${p.id}">${esc(name(p))}</a></h3><div class="product-vehicle">${icon("car")}${esc(p.vehicle || t("Ask about fitment", "பொருத்தம் பற்றி கேளுங்கள்"))}</div><div class="product-bottom"><div class="product-price">${money(p.price)}<small>${p.stock_quantity == null ? t("Availability on enquiry", "விசாரித்து கிடைப்பை அறியவும்") : p.stock_quantity === 0 ? t("Out of stock", "இருப்பில் இல்லை") : t("In stock", "இருப்பில் உள்ளது")}</small></div><div class="product-card-actions"><button class="add-button" data-add="${p.id}" aria-label="${esc(t("Add " + name(p) + " to cart", name(p) + " கூடையில் சேர்"))}" ${p.stock_quantity === 0 || p.price == null ? "disabled" : ""}>${icon("plus")}</button>${p.price == null ? `<a class="card-buy" href="request-part.html?part=${encodeURIComponent(name(p))}&vehicle=${encodeURIComponent(p.vehicle || "")}">${t("Get price", "விலை கேள்")}</a>` : `<button class="card-buy" data-buy="${p.id}" ${p.stock_quantity === 0 ? "disabled" : ""}>${t("Buy now", "இப்போது வாங்கு")}</button>`}</div></div></div></article>`;
+  }
+  function buyNow(id, requestedQuantity = 1) {
+    const product = products.find(item => item.id === Number(id));
+    if (!product) return;
+    if (product.price == null) {
+      location.href = `request-part.html?part=${encodeURIComponent(name(product))}&vehicle=${encodeURIComponent(product.vehicle || '')}`;
+      return;
+    }
+    const maximum = product.stock_quantity == null ? 99 : Math.min(99, product.stock_quantity);
+    if (maximum < 1) return toast(t('This part is out of stock. Please contact us.', 'இந்த பாகம் இருப்பில் இல்லை. எங்களைத் தொடர்பு கொள்ளவும்.'));
+    const candidate = Number(requestedQuantity);
+    const qty = Math.max(1, Math.min(maximum, Number.isSafeInteger(candidate) ? candidate : 1));
+    try { sessionStorage.setItem('aamm_buy_now', JSON.stringify({ id: product.id, qty })); } catch {}
+    location.href = `cart.html?buy=${product.id}&qty=${qty}`;
   }
   function addToCart(id, qty = 1) {
     const p = products.find((x) => x.id === +id);
@@ -495,7 +509,7 @@
     const priced = p.price != null,
       out = p.stock_quantity === 0;
     pageShell(
-      `<a class="text-link back-to-shop" href="products.html">← ${t("All parts", "அனைத்து பாகங்கள்")}</a><div class="detail-layout quiet-product"><div class="detail-visual">${placeholder()}</div><section class="detail-summary"><div class="product-category">${esc(p.category)}</div><h1 class="page-heading">${esc(name(p))}</h1><p class="detail-vehicle">${icon("car")} ${esc(p.vehicle || t("Vehicle not listed", "வாகனம் குறிப்பிடப்படவில்லை"))} <span>${t("Confirm fitment with us", "பொருத்தத்தை உறுதி செய்யுங்கள்")}</span></p><div class="detail-price">${money(p.price)}</div><p class="availability-line">${p.stock_quantity == null ? t("Ask us about availability", "கிடைக்கும் நிலையை விசாரிக்கவும்") : out ? t("Currently out of stock", "தற்போது இருப்பில் இல்லை") : `${p.stock_quantity} ${t("in stock", "இருப்பில் உள்ளன")}`}</p><div class="button-row product-primary-actions">${priced ? `<div class="quantity"><button id="detailMinus" aria-label="${t("Decrease quantity", "எண்ணிக்கையைக் குறைக்கவும்")}" ${out ? "disabled" : ""}>−</button><span id="detailQuantity">1</span><button id="detailPlus" aria-label="${t("Increase quantity", "எண்ணிக்கையை அதிகரிக்கவும்")}" ${out ? "disabled" : ""}>+</button></div><button id="detailAdd" class="button" ${out ? "disabled" : ""}>${icon("cart")}${t("Add to cart", "கூடையில் சேர்")}</button>` : `<a class="button" href="request-part.html?part=${encodeURIComponent(name(p))}&vehicle=${encodeURIComponent(p.vehicle || "")}">${t("Request a price", "விலை கேளுங்கள்")}${icon("arrow")}</a>`}<button class="icon-button wish-button-static ${wishes().includes(p.id) ? "saved" : ""}" data-wish="${p.id}" aria-label="${t("Save part", "பாகத்தைச் சேமி")}" aria-pressed="${wishes().includes(p.id)}">${icon("heart")}</button></div><a class="text-link part-question" href="https://wa.me/919344898473?text=${encodeURIComponent(`Hello Alagar Automobiles, please help me with ${name(p)} (catalogue ${p.id}). Please confirm fitment and availability.`)}" target="_blank" rel="noopener">${t("Ask about this part", "இந்த பாகம் பற்றி கேளுங்கள்")}${icon("arrow")}</a><details class="quiet-details product-specs"><summary>${t("Part details", "பாகத்தின் விவரங்கள்")}</summary><dl class="spec-list"><dt>${t("Type", "வகை")}</dt><dd>${esc(p.subcategory || "—")}</dd><dt>${t("Part number", "பாகத்தின் எண்")}</dt><dd>${esc(p.sku || t("Ask our team", "எங்கள் குழுவிடம் கேளுங்கள்"))}</dd><dt>${t("Brand", "பிராண்ட்")}</dt><dd>${esc(p.brand || t("Confirm with us", "எங்களுடன் உறுதி செய்யுங்கள்"))}</dd></dl><p class="muted">${esc(p.description || "")}</p><p class="compatibility-note">${p.compatibility_verified ? t("The catalogue vehicle reference has been reviewed. Confirm your exact variant and year before ordering.", "பட்டியலின் வாகனக் குறிப்பு மதிப்பாய்வு செய்யப்பட்டது. ஆர்டர் முன் உங்கள் வகை மற்றும் ஆண்டை உறுதி செய்யுங்கள்.") : t("Compatibility not verified. Contact Alagar Automobiles before ordering.", "பொருத்தம் உறுதிப்படுத்தப்படவில்லை. ஆர்டர் முன் அழகர் ஆட்டோமொபைல்ஸைத் தொடர்பு கொள்ளுங்கள்.")}</p></details></section></div><section class="part-guide-section" aria-label="${t("Part location guide", "பாகத்தின் இருப்பிட வழிகாட்டி")}"><div id="partLocation"></div></section><section class="section related-parts"><div class="section-heading"><h2>${t("Related parts", "தொடர்புடைய பாகங்கள்")}</h2></div><div class="product-grid home-product-grid">${products
+      `<a class="text-link back-to-shop" href="products.html">← ${t("All parts", "அனைத்து பாகங்கள்")}</a><div class="detail-layout quiet-product"><div class="detail-visual">${placeholder()}</div><section class="detail-summary"><div class="product-category">${esc(p.category)}</div><h1 class="page-heading">${esc(name(p))}</h1><p class="detail-vehicle">${icon("car")} ${esc(p.vehicle || t("Vehicle not listed", "வாகனம் குறிப்பிடப்படவில்லை"))} <span>${t("Confirm fitment with us", "பொருத்தத்தை உறுதி செய்யுங்கள்")}</span></p><div class="detail-price">${money(p.price)}</div><p class="availability-line">${p.stock_quantity == null ? t("Ask us about availability", "கிடைக்கும் நிலையை விசாரிக்கவும்") : out ? t("Currently out of stock", "தற்போது இருப்பில் இல்லை") : `${p.stock_quantity} ${t("in stock", "இருப்பில் உள்ளன")}`}</p><div class="button-row product-primary-actions">${priced ? `<div class="quantity"><button id="detailMinus" aria-label="${t("Decrease quantity", "எண்ணிக்கையைக் குறைக்கவும்")}" ${out ? "disabled" : ""}>−</button><span id="detailQuantity">1</span><button id="detailPlus" aria-label="${t("Increase quantity", "எண்ணிக்கையை அதிகரிக்கவும்")}" ${out ? "disabled" : ""}>+</button></div><button id="detailBuy" class="button" ${out ? "disabled" : ""}>${t("Buy now", "இப்போது வாங்கு")}</button><button id="detailAdd" class="button secondary" ${out ? "disabled" : ""}>${t("Add to cart", "கூடையில் சேர்")}</button>` : `<a class="button" href="request-part.html?part=${encodeURIComponent(name(p))}&vehicle=${encodeURIComponent(p.vehicle || "")}">${t("Get price", "விலை கேளுங்கள்")}${icon("arrow")}</a>`}<button class="icon-button wish-button-static ${wishes().includes(p.id) ? "saved" : ""}" data-wish="${p.id}" aria-label="${t("Save part", "பாகத்தைச் சேமி")}" aria-pressed="${wishes().includes(p.id)}">${icon("heart")}</button></div><a class="text-link part-question" href="https://wa.me/919344898473?text=${encodeURIComponent(`Hello Alagar Automobiles, please help me with ${name(p)} (catalogue ${p.id}). Please confirm fitment and availability.`)}" target="_blank" rel="noopener">${t("Ask about this part", "இந்த பாகம் பற்றி கேளுங்கள்")}${icon("arrow")}</a><details class="quiet-details product-specs"><summary>${t("Part details", "பாகத்தின் விவரங்கள்")}</summary><dl class="spec-list"><dt>${t("Type", "வகை")}</dt><dd>${esc(p.subcategory || "—")}</dd><dt>${t("Part number", "பாகத்தின் எண்")}</dt><dd>${esc(p.sku || t("Ask our team", "எங்கள் குழுவிடம் கேளுங்கள்"))}</dd><dt>${t("Brand", "பிராண்ட்")}</dt><dd>${esc(p.brand || t("Confirm with us", "எங்களுடன் உறுதி செய்யுங்கள்"))}</dd></dl><p class="muted">${esc(p.description || "")}</p><p class="compatibility-note">${p.compatibility_verified ? t("The catalogue vehicle reference has been reviewed. Confirm your exact variant and year before ordering.", "பட்டியலின் வாகனக் குறிப்பு மதிப்பாய்வு செய்யப்பட்டது. ஆர்டர் முன் உங்கள் வகை மற்றும் ஆண்டை உறுதி செய்யுங்கள்.") : t("Compatibility not verified. Contact Alagar Automobiles before ordering.", "பொருத்தம் உறுதிப்படுத்தப்படவில்லை. ஆர்டர் முன் அழகர் ஆட்டோமொபைல்ஸைத் தொடர்பு கொள்ளுங்கள்.")}</p></details></section></div><section class="part-guide-section" aria-label="${t("Part location guide", "பாகத்தின் இருப்பிட வழிகாட்டி")}"><div id="partLocation"></div></section><section class="section related-parts"><div class="section-heading"><h2>${t("Related parts", "தொடர்புடைய பாகங்கள்")}</h2></div><div class="product-grid home-product-grid">${products
         .filter((x) => x.category === p.category && x.id !== p.id)
         .slice(0, 3)
         .map(productCard)
@@ -515,6 +529,7 @@
         );
       };
       $("#detailAdd").onclick = () => addToCart(p.id, qty);
+      $("#detailBuy").onclick = () => buyNow(p.id, qty);
     }
   }
   function renderWishlist() {
@@ -542,7 +557,23 @@
     );
   }
   function renderCart() {
-    const items = cart()
+    const directCheckout = params.has("buy");
+    let selection = null;
+    if (directCheckout) {
+      const id = Number(params.get("buy"));
+      const product = Number.isSafeInteger(id) && id > 0 ? products.find(item => item.id === id) : null;
+      if (!product || product.price == null || product.stock_quantity === 0) {
+        pageShell(heading(t("Checkout", "வாங்குதல்"), "") + empty(t("This part is not available for direct checkout.", "இந்த பாகத்தை நேரடியாக வாங்க முடியாது."), t("Choose another part or ask our team for help.", "வேறு பாகத்தைத் தேர்ந்தெடுக்கவும் அல்லது எங்கள் குழுவிடம் உதவி கேட்கவும்."), product ? `product.html?id=${product.id}` : "products.html", t("View parts", "பாகங்களைப் பார்")));
+        return;
+      }
+      let stored = null;
+      try { stored = JSON.parse(sessionStorage.getItem("aamm_buy_now")); } catch {}
+      const candidate = Number(params.has("qty") ? params.get("qty") : stored?.id === id ? stored.qty : 1);
+      const maximum = product.stock_quantity == null ? 99 : Math.min(99, product.stock_quantity);
+      selection = { id, qty: Math.max(1, Math.min(maximum, Number.isSafeInteger(candidate) ? candidate : 1)) };
+      try { sessionStorage.setItem("aamm_buy_now", JSON.stringify(selection)); } catch {}
+    }
+    const items = (directCheckout ? [selection] : cart())
       .map((i) => ({
         p: products.find((p) => p.id === +i.id),
         qty: Math.min(99, +i.qty || 1),
@@ -550,9 +581,9 @@
       .filter((i) => i.p);
     pageShell(
       heading(
-        t("Your cart", "உங்கள் பாகங்கள், ஒன்றாக."),
+        directCheckout ? t("Checkout this part", "இந்த பாகத்தை வாங்குங்கள்") : t("Your cart", "உங்கள் பாகங்கள், ஒன்றாக."),
         t(
-          "Review your parts and send an enquiry.",
+          directCheckout ? "Review this part and send your order enquiry." : "Review your parts and send an enquiry.",
           "உங்கள் தேர்வைச் சரிபாருங்கள். கிடைக்கும் நிலை, டெலிவரி மற்றும் இறுதி தொகையை Alagar Automobiles உறுதி செய்யும்.",
         ),
       ) +
@@ -573,7 +604,7 @@
     document.querySelectorAll("[data-qty]").forEach(
       (el) =>
         (el.onclick = () => {
-          const value = cart();
+          const value = directCheckout ? [selection] : cart();
           const item = value.find((i) => +i.id === +el.dataset.qty);
           const p = products.find((p) => p.id === +el.dataset.qty);
           item.qty = Math.max(
@@ -583,7 +614,11 @@
               (+item.qty || 1) + +el.dataset.delta,
             ),
           );
-          write("aamm_cart", value);
+          if (directCheckout) {
+            try { sessionStorage.setItem("aamm_buy_now", JSON.stringify(item)); } catch {}
+            params.set("qty", String(item.qty));
+            history.replaceState(null, "", "cart.html?" + params);
+          } else write("aamm_cart", value);
           renderCart();
           updateCount();
         }),
@@ -591,6 +626,11 @@
     document.querySelectorAll("[data-remove]").forEach(
       (el) =>
         (el.onclick = () => {
+          if (directCheckout) {
+            try { sessionStorage.removeItem("aamm_buy_now"); } catch {}
+            location.href = "cart.html";
+            return;
+          }
           write(
             "aamm_cart",
             cart().filter((i) => +i.id !== +el.dataset.remove),
@@ -795,91 +835,160 @@
           : `<div class="notice">${t("The original catalogue does not contain verified product-level brand records. Ask Alagar Automobiles to confirm the brand for any part you’re considering.", "அசல் பட்டியலில் பொருள் வாரியான உறுதி செய்யப்பட்ட பிராண்ட் பதிவுகள் இல்லை. நீங்கள் விரும்பும் பாகத்தின் பிராண்டை Alagar Automobiles உடன் உறுதி செய்யுங்கள்.")}</div><a class="button" href="products.html">${t("Explore the catalogue", "பட்டியலைப் பாருங்கள்")}${icon("arrow")}</a>`),
     );
   }
-  async function renderAccount() {
-    let session = null;
+  let googleIdentityPromise = null;
+  let googleSignInGeneration = 0;
+  function loadGoogleIdentity() {
+    if (window.google?.accounts?.id) return Promise.resolve(window.google.accounts.id);
+    if (googleIdentityPromise) return googleIdentityPromise;
+    googleIdentityPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.id = 'googleIdentityScript';
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      let finished = false;
+      const finish = (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        script.onload = script.onerror = null;
+        if (error) { script.remove(); reject(error); }
+        else resolve(window.google.accounts.id);
+      };
+      const timer = setTimeout(() => finish(new Error(t('Google sign-in could not load. Please try again.', 'Google உள்நுழைவை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'))), 12000);
+      script.onload = () => finish(window.google?.accounts?.id ? null : new Error(t('Google sign-in is unavailable. Please try again.', 'Google உள்நுழைவு கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.')));
+      script.onerror = () => finish(new Error(t('Google sign-in could not load. Please try again.', 'Google உள்நுழைவை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.')));
+      document.head.append(script);
+    }).catch(error => { googleIdentityPromise = null; throw error; });
+    return googleIdentityPromise;
+  }
+  async function mountGoogleSignIn(keepError = false) {
+    const host = $('#googleButton');
+    const status = $('#googleStatus');
+    const error = $('#googleError');
+    const retry = $('#googleRetry');
+    if (!host || !config.google?.configured || !config.google.client_id) return;
+    const generation = ++googleSignInGeneration;
+    host.innerHTML = '';
+    host.setAttribute('aria-busy', 'true');
+    status.textContent = t('Loading Google sign-in…', 'Google உள்நுழைவு ஏற்றப்படுகிறது…');
+    if (!keepError) error.textContent = '';
+    retry.hidden = true;
     try {
-      session = await api("/auth/me");
-    } catch {}
+      const [challenge, identity] = await Promise.all([
+        api('/auth/google/challenge', { method: 'POST', body: '{}' }),
+        loadGoogleIdentity(),
+      ]);
+      if (!host.isConnected || generation !== googleSignInGeneration) return;
+      if (typeof challenge.nonce !== 'string' || !challenge.nonce) throw new Error(t('Sign-in could not start. Please try again.', 'உள்நுழைவைத் தொடங்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'));
+      let signingIn = false;
+      identity.initialize({
+        client_id: config.google.client_id,
+        nonce: challenge.nonce,
+        auto_select: false,
+        ux_mode: 'popup',
+        callback: async response => {
+          if (signingIn || !host.isConnected || generation !== googleSignInGeneration) return;
+          if (typeof response?.credential !== 'string' || !response.credential) {
+            error.textContent = t('Choose a Google account to continue.', 'தொடர Google கணக்கைத் தேர்ந்தெடுக்கவும்.');
+            return;
+          }
+          signingIn = true;
+          host.setAttribute('aria-busy', 'true');
+          status.textContent = t('Signing you in…', 'உள்நுழைகிறது…');
+          error.textContent = '';
+          try {
+            const approved = await api('/auth/google', { method: 'POST', body: JSON.stringify({ credential: response.credential }) });
+            if (!approved.user) throw new Error(t('Sign-in could not be completed. Please try again.', 'உள்நுழைவை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'));
+            if (!host.isConnected || generation !== googleSignInGeneration) return;
+            googleSignInGeneration++;
+            toast(t('Signed in securely', 'பாதுகாப்பாக உள்நுழைந்துள்ளீர்கள்'));
+            await renderCustomerDashboard(approved.user);
+          } catch (failure) {
+            if (!host.isConnected || generation !== googleSignInGeneration) return;
+            error.textContent = failure.message;
+            signingIn = false;
+            // The server consumes each nonce. Every failed attempt gets a new challenge.
+            await mountGoogleSignIn(true);
+          }
+        },
+      });
+      identity.renderButton(host, {
+        type: 'standard',
+        theme: document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        locale: language === 'ta' ? 'ta' : 'en',
+        width: Math.min(340, Math.max(200, Math.floor(host.clientWidth || 280))),
+      });
+      host.setAttribute('aria-busy', 'false');
+      status.textContent = '';
+    } catch (failure) {
+      if (!host.isConnected || generation !== googleSignInGeneration) return;
+      host.setAttribute('aria-busy', 'false');
+      status.textContent = '';
+      error.textContent = failure.message;
+      retry.hidden = false;
+    }
+  }
+  async function renderAccount() {
+    googleSignInGeneration++;
+    let session = null;
+    try { session = await api('/auth/me'); } catch {}
     if (session?.isAdmin) {
-      pageShell(
-        heading(t("Your business account.", "உங்கள் வணிகக் கணக்கு."), "") +
-          `<section class="panel"><p class="muted">${t("You are signed in as an administrator.", "நீங்கள் நிர்வாகியாக உள்நுழைந்துள்ளீர்கள்.")}</p><a class="button" href="admin.html">${t("Open business dashboard", "வணிக நிர்வாகத்தைத் திறக்கவும்")}${icon("arrow")}</a></section>`,
-      );
+      pageShell(heading(t('Your business account.', 'உங்கள் வணிகக் கணக்கு.'), '') + `<section class="panel"><p class="muted">${t('You are signed in as an administrator.', 'நீங்கள் நிர்வாகியாக உள்நுழைந்துள்ளீர்கள்.')}</p><a class="button" href="admin.html">${t('Open business dashboard', 'வணிக நிர்வாகத்தைத் திறக்கவும்')}${icon('arrow')}</a></section>`);
       return;
     }
     if (session?.user) return renderCustomerDashboard(session.user);
-    const configured = !!config.features?.otp;
-    pageShell(
-      heading(
-        t("Your account", "உங்கள் Alagar Automobiles கணக்கு."),
-        t(
-          "A place for your saved parts, vehicle and order enquiries.",
-          "நீங்கள் சேமித்த பாகங்கள், வாகனம் மற்றும் ஆர்டர் விசாரணைகளுக்கான இடம்.",
-        ),
-      ) +
-        `<div class="two-column"><section class="panel"><h2>${t("Sign in with your phone", "உங்கள் தொலைபேசியுடன் உள்நுழையுங்கள்")}</h2><form id="signInForm"><label class="field">${t("Mobile number", "கைபேசி எண்")}<input name="phone" type="tel" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit Indian mobile" autocomplete="tel-national"></label><button class="button" type="submit" ${configured ? "" : "disabled"}>${t("Request a sign-in code", "உள்நுழைவு குறியீடு கோருங்கள்")}${icon("arrow")}</button><p class="error" id="loginError" role="alert"></p></form><div id="verifyPanel"></div>${configured ? "" : `<div class="notice">${t("Secure phone sign-in is awaiting SMS provider configuration. You can browse, save parts and send enquiries without signing in.", "பாதுகாப்பான தொலைபேசி உள்நுழைவுக்கு SMS சேவை கட்டமைப்பு தேவை. உள்நுழையாமல் பொருட்களைப் பார்த்து, சேமித்து, விசாரணைகளை அனுப்பலாம்.")}</div>`}</section><aside class="panel"><h2>${t("Saved in this browser", "இந்த உலாவியில் சேமிக்கப்பட்டவை")}</h2><div class="footer-links"><a href="wishlist.html">${icon("heart")} &nbsp;${t("Wishlist", "விருப்பப் பட்டியல்")} (${wishes().length})</a><a href="vehicle-finder.html">${icon("car")} &nbsp;${esc(read("aamm_saved_vehicle", "") || t("Choose a vehicle", "வாகனத்தைத் தேர்ந்தெடுக்கவும்"))}</a><a href="track-order.html">${icon("box")} &nbsp;${t("Track your enquiry", "உங்கள் விசாரணை நிலை")}</a><a href="cart.html">${icon("cart")} &nbsp;${t("Your shopping cart", "உங்கள் ஷாப்பிங் கூடை")}</a></div></aside></div>`,
-    );
-    $("#signInForm").onsubmit = async (e) => {
-      e.preventDefault();
-      const form = e.currentTarget,
-        button = form.querySelector("button"),
-        phone = new FormData(form).get("phone");
+    const phoneConfigured = !!config.features?.otp;
+    const googleConfigured = !!(config.google?.configured && config.google.client_id);
+    pageShell(heading(t('Your account', 'உங்கள் கணக்கு'), t('Your orders and details, together.', 'உங்கள் ஆர்டர்களும் விவரங்களும், ஒன்றாக.')) + `<div class="account-signin-layout"><section class="panel account-signin"><h2>${t('Welcome back', 'மீண்டும் வரவேற்கிறோம்')}</h2><p class="muted">${t('Sign in to keep track of your orders and save your details.', 'உங்கள் ஆர்டர்களின் நிலையைக் காணவும் விவரங்களைச் சேமிக்கவும் உள்நுழையுங்கள்.')}</p>${googleConfigured ? `<div class="google-signin"><div id="googleButton" class="google-button-host" aria-busy="true"></div><p id="googleStatus" class="signin-status" role="status" aria-live="polite"></p><p class="error" id="googleError" role="alert"></p><button id="googleRetry" type="button" class="button secondary small" hidden>${t('Try Google sign-in again', 'Google உள்நுழைவை மீண்டும் முயல்க')}</button></div><p class="signin-privacy">${t('Google shares your name and email for your account.', 'உங்கள் கணக்கிற்காக Google உங்கள் பெயரையும் மின்னஞ்சலையும் பகிரும்.')} <a href="policies.html#google-sign-in">${t('Privacy details', 'தனியுரிமை விவரங்கள்')}</a></p>` : `<p class="signin-status">${t('Google sign-in is being set up. You can continue as a guest.', 'Google உள்நுழைவு அமைக்கப்படுகிறது. விருந்தினராகத் தொடரலாம்.')}</p>`}${phoneConfigured ? `<details id="phoneSignInDetails" class="account-phone-option"><summary>${t('Use a phone number instead', 'தொலைபேசி எண்ணைப் பயன்படுத்தவும்')}</summary><form id="signInForm"><label class="field">${t('Mobile number', 'கைபேசி எண்')}<input name="phone" type="tel" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="${t('10-digit Indian mobile', '10 இலக்க இந்திய கைபேசி எண்')}" autocomplete="tel-national"></label><button class="button secondary" type="submit">${t('Request a sign-in code', 'உள்நுழைவு குறியீடு கோருங்கள்')}${icon('arrow')}</button><p class="error" id="loginError" role="alert"></p></form><div id="verifyPanel"></div></details>` : ''}<a class="button secondary full account-guest" id="continueAsGuest" href="products.html">${t('Continue as a guest', 'விருந்தினராகத் தொடரவும்')}${icon('arrow')}</a><p class="account-owner"><a id="ownerSignIn" href="admin.html">${t('Business owner? Sign in here', 'வணிக உரிமையாளரா? இங்கே உள்நுழையுங்கள்')}</a></p></section><aside class="account-saved"><h2>${t('Saved in this browser', 'இந்த உலாவியில் சேமிக்கப்பட்டவை')}</h2><div class="footer-links"><a href="wishlist.html">${icon('heart')} &nbsp;${t('Wishlist', 'விருப்பப் பட்டியல்')} (${wishes().length})</a><a href="vehicle-finder.html">${icon('car')} &nbsp;${esc(read('aamm_saved_vehicle', '') || t('Choose a vehicle', 'வாகனத்தைத் தேர்ந்தெடுக்கவும்'))}</a><a href="track-order.html">${icon('box')} &nbsp;${t('Track an enquiry', 'விசாரணை நிலை')}</a><a href="cart.html">${icon('cart')} &nbsp;${t('Your cart', 'உங்கள் கூடை')}</a></div></aside></div>`);
+    if (googleConfigured) {
+      $('#googleRetry').onclick = () => mountGoogleSignIn();
+      mountGoogleSignIn();
+    }
+    if (phoneConfigured) bindPhoneSignIn();
+  }
+  function bindPhoneSignIn() {
+    $('#signInForm').onsubmit = async event => {
+      event.preventDefault();
+      const form = event.currentTarget, button = form.querySelector('button'), phone = new FormData(form).get('phone');
       button.disabled = true;
-      $("#loginError").textContent = "";
+      $('#loginError').textContent = '';
       try {
-        const result = await api("/auth/otp/request", {
-          method: "POST",
-          body: JSON.stringify({ phone }),
-        });
-        $("#verifyPanel").innerHTML =
-          `<form id="verifyForm"><label class="field">${t("Verification code", "சரிபார்ப்பு குறியீடு")}<input name="code" required pattern="[0-9]{4,8}" minlength="4" maxlength="8" inputmode="numeric" autocomplete="one-time-code"></label><button class="button">${t("Verify & sign in", "சரிபார்த்து உள்நுழைக")}${icon("arrow")}</button><p class="error" id="verifyError" role="alert"></p></form>`;
+        const result = await api('/auth/otp/request', { method: 'POST', body: JSON.stringify({ phone }) });
+        $('#verifyPanel').innerHTML = `<form id="verifyForm"><label class="field">${t('Verification code', 'சரிபார்ப்பு குறியீடு')}<input name="code" required pattern="[0-9]{4,8}" minlength="4" maxlength="8" inputmode="numeric" autocomplete="one-time-code"></label><button class="button">${t('Verify & sign in', 'சரிபார்த்து உள்நுழைக')}${icon('arrow')}</button><p class="error" id="verifyError" role="alert"></p></form>`;
         let seconds = result.resend_after || 60;
-        const label = t("Resend code", "குறியீட்டை மீண்டும் அனுப்பு");
+        const label = t('Resend code', 'குறியீட்டை மீண்டும் அனுப்பு');
         button.textContent = `${label} (${seconds}s)`;
         const timer = setInterval(() => {
           seconds--;
-          if (!button.isConnected) {
-            clearInterval(timer);
-            return;
-          }
+          if (!button.isConnected) { clearInterval(timer); return; }
           button.textContent = seconds ? `${label} (${seconds}s)` : label;
-          if (!seconds) {
-            clearInterval(timer);
-            button.disabled = false;
-          }
+          if (!seconds) { clearInterval(timer); button.disabled = false; }
         }, 1000);
-        $("#verifyForm input").focus();
-        $("#verifyForm").onsubmit = async (event) => {
-          event.preventDefault();
-          const verify = event.currentTarget,
-            submit = verify.querySelector("button");
+        $('#verifyForm input').focus();
+        $('#verifyForm').onsubmit = async verification => {
+          verification.preventDefault();
+          const verify = verification.currentTarget, submit = verify.querySelector('button');
           submit.disabled = true;
           try {
-            const approved = await api("/auth/otp/verify", {
-              method: "POST",
-              body: JSON.stringify({
-                phone,
-                code: new FormData(verify).get("code"),
-              }),
-            });
+            const approved = await api('/auth/otp/verify', { method: 'POST', body: JSON.stringify({ phone, code: new FormData(verify).get('code') }) });
             clearInterval(timer);
-            toast(t("Signed in securely", "பாதுகாப்பாக உள்நுழைந்துள்ளீர்கள்"));
+            toast(t('Signed in securely', 'பாதுகாப்பாக உள்நுழைந்துள்ளீர்கள்'));
             await renderCustomerDashboard(approved.user);
-          } catch (error) {
-            $("#verifyError").textContent = error.message;
-            submit.disabled = false;
-          }
+          } catch (error) { $('#verifyError').textContent = error.message; submit.disabled = false; }
         };
-      } catch (error) {
-        $("#loginError").textContent = error.message;
-        button.disabled = false;
-      }
+      } catch (error) { $('#loginError').textContent = error.message; button.disabled = false; }
     };
   }
   async function renderCustomerDashboard(user) {
+    const googleUser = user.auth_provider === "google";
     try {
       const [orders, notifications, requests, bills] = await Promise.all([
-        api(`/orders/${encodeURIComponent(user.phone)}`),
+        api("/my/orders"),
         api("/notifications"),
         api("/my/requests"),
         api("/my/bills"),
@@ -892,7 +1001,7 @@
             "உங்கள் விவரங்கள், விசாரணைகள் மற்றும் தகவல்கள், ஒன்றாக.",
           ),
         ) +
-          `<div class="button-row" style="margin-bottom:25px"><a href="wishlist.html" class="button secondary small">${icon("heart")}${t("Wishlist", "விருப்பப் பட்டியல்")}</a><a href="vehicle-finder.html" class="button secondary small">${icon("car")}${t("Saved vehicle", "சேமித்த வாகனம்")}</a><button class="button secondary small" id="customerLogout">${t("Sign out", "வெளியேறு")}</button></div><div class="two-column"><section class="panel"><h2>${t("Your profile & delivery address", "உங்கள் விவரம் மற்றும் டெலிவரி முகவரி")}</h2><form id="profileForm"><div class="form-grid"><label class="field">${t("Name", "பெயர்")}<input name="name" maxlength="100" value="${esc(user.name)}" autocomplete="name"></label><label class="field">${t("Email (optional)", "மின்னஞ்சல் (விருப்பம்)")}<input type="email" name="email" maxlength="200" value="${esc(user.email)}" autocomplete="email"></label><label class="field span-2">${t("Address", "முகவரி")}<textarea name="address" maxlength="1000" autocomplete="street-address">${esc(user.address)}</textarea></label><label class="field">${t("Delivery preference", "டெலிவரி விருப்பம்")}<select name="delivery_pref">${["pickup", "bus", "lorry"].map((v) => `<option ${v === user.delivery_pref ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><button class="button small">${t("Save details", "விவரங்களைச் சேமி")}</button><p class="error" id="profileError" role="alert"></p></form></section><aside class="panel"><h2>${t("Your notifications", "உங்கள் அறிவிப்புகள்")}</h2>${
+          `<div class="button-row" style="margin-bottom:25px"><a href="wishlist.html" class="button secondary small">${icon("heart")}${t("Wishlist", "விருப்பப் பட்டியல்")}</a><a href="vehicle-finder.html" class="button secondary small">${icon("car")}${t("Saved vehicle", "சேமித்த வாகனம்")}</a><button class="button secondary small" id="customerLogout">${t("Sign out", "வெளியேறு")}</button></div><div class="two-column"><section class="panel"><h2>${t("Your profile & delivery address", "உங்கள் விவரம் மற்றும் டெலிவரி முகவரி")}</h2><form id="profileForm"><div class="form-grid"><label class="field">${t("Name", "பெயர்")}<input name="name" maxlength="100" value="${esc(user.name)}" autocomplete="name"></label><label class="field">${googleUser ? t("Google email", "Google மின்னஞ்சல்") : t("Email (optional)", "மின்னஞ்சல் (விருப்பம்)")}<input type="email" name="email" maxlength="200" value="${esc(googleUser ? user.google_email || user.email : user.email)}" autocomplete="email" ${googleUser ? 'readonly aria-describedby="googleEmailHelp"' : ''}>${googleUser ? `<small class="account-field-help" id="googleEmailHelp">${t("Verified by Google. Change this address in your Google account.", "Google மூலம் சரிபார்க்கப்பட்டது. இந்த முகவரியை உங்கள் Google கணக்கில் மாற்றவும்.")}</small>` : ''}</label><label class="field span-2">${t("Delivery contact phone (optional)", "டெலிவரி தொடர்பு எண் (விருப்பம்)")}<input type="tel" name="contact_phone" maxlength="10" pattern="[6-9][0-9]{9}" inputmode="tel" autocomplete="tel-national" value="${esc(user.contact_phone || '')}" placeholder="${t("10-digit Indian mobile", "10 இலக்க இந்திய கைபேசி எண்")}" aria-describedby="contactPhoneHelp"><small class="account-field-help" id="contactPhoneHelp">${t("Unverified delivery contact only. This number does not link orders or another account.", "இது சரிபார்க்கப்படாத டெலிவரி தொடர்பு எண் மட்டுமே. இந்த எண் ஆர்டர்களையோ மற்றொரு கணக்கையோ இணைக்காது.")}</small></label><label class="field span-2">${t("Address", "முகவரி")}<textarea name="address" maxlength="1000" autocomplete="street-address">${esc(user.address)}</textarea></label><label class="field">${t("Delivery preference", "டெலிவரி விருப்பம்")}<select name="delivery_pref">${["pickup", "bus", "lorry"].map((v) => `<option ${v === user.delivery_pref ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><button class="button small">${t("Save details", "விவரங்களைச் சேமி")}</button><p class="error" id="profileError" role="alert"></p></form></section><aside class="panel"><h2>${t("Your notifications", "உங்கள் அறிவிப்புகள்")}</h2>${
             notifications.length
               ? notifications
                   .slice(0, 15)
@@ -906,6 +1015,7 @@
       );
       $("#customerLogout").onclick = async () => {
         await api("/auth/logout", { method: "POST" });
+        window.google?.accounts?.id?.disableAutoSelect?.();
         toast(t("Signed out", "வெளியேறியுள்ளீர்கள்"));
         await renderAccount();
       };
@@ -914,12 +1024,14 @@
         const button = e.currentTarget.querySelector("button");
         button.disabled = true;
         try {
-          await api(`/users/${encodeURIComponent(user.phone)}`, {
+          const details = Object.fromEntries(new FormData(e.currentTarget));
+          if (googleUser) delete details.email;
+          $("#profileError").textContent = "";
+          const updated = await api("/me", {
             method: "PUT",
-            body: JSON.stringify(
-              Object.fromEntries(new FormData(e.currentTarget)),
-            ),
+            body: JSON.stringify(details),
           });
+          Object.assign(user, updated.user || details);
           toast(t("Your details are saved", "உங்கள் விவரங்கள் சேமிக்கப்பட்டன"));
         } catch (error) {
           $("#profileError").textContent = error.message;
@@ -1142,7 +1254,7 @@
           "Alagar Automobiles இல் விசாரணைகள், ஆர்டர்கள் மற்றும் உங்கள் தகவல் எவ்வாறு செயல்படுகிறது.",
         ),
       ) +
-        `<article class="panel narrow legal-copy"><h2 id="ordering">${t("Enquiries & ordering", "விசாரணைகள் மற்றும் ஆர்டர்")}</h2><p>${t("Catalogue prices are references from the existing product records. Availability, exact compatibility, delivery costs and final pricing must be confirmed by Alagar Automobiles. Submitting a cart or sending a WhatsApp message is an enquiry and does not confirm a sale. Online payments are unavailable until a payment provider is configured.", "பட்டியல் விலைகள் தற்போதைய பதிவுகளின் குறிப்புகள். கிடைக்கும் நிலை, பொருத்தம், டெலிவரி கட்டணம் மற்றும் இறுதி விலையை Alagar Automobiles உறுதி செய்ய வேண்டும். விசாரணை அனுப்புதல் விற்பனையை உறுதி செய்யாது.")}</p><h2>${t("Returns, refunds & exchanges", "திரும்பப் பெறுதல், பணத்திருப்பம் மற்றும் மாற்றம்")}</h2><p>${t("Contact Alagar Automobiles before placing an order to confirm the applicable return, refund, warranty and exchange terms for your part. No blanket return period or exchange valuation is promised by this website. Old-part exchange enquiries require the team’s review and inspection.", "ஆர்டர் செய்யும் முன் பாகத்திற்கான திரும்பப் பெறுதல், பணத்திருப்பம், உத்தரவாதம் மற்றும் மாற்று விதிகளை Alagar Automobiles உடன் உறுதி செய்யுங்கள். மாற்று விசாரணைகள் குழுவின் ஆய்விற்கு உட்பட்டவை.")}</p><h2 id="privacy">${t("Your information", "உங்கள் தகவல்")}</h2><p>${t("Enquiry forms collect your name, phone number, vehicle/part details and message so Alagar Automobiles can respond. Cart enquiries also collect your delivery preference and address. Do not submit payment credentials or sensitive identity documents. Contact Alagar Automobiles by phone to request correction or deletion of enquiry information.", "விசாரணைக்கு பதிலளிக்க உங்கள் பெயர், கைபேசி எண், வாகனம்/பாகம் விவரங்கள் மற்றும் செய்தி சேகரிக்கப்படும். ஆர்டர் விசாரணைகளில் முகவரியும் பெறப்படும். கட்டண ரகசியங்கள் அல்லது முக்கிய அடையாள ஆவணங்களைச் சமர்ப்பிக்க வேண்டாம்.")}</p><h2>${t("Browser storage & external services", "உலாவி சேமிப்பு மற்றும் வெளிப்புற சேவைகள்")}</h2><p>${t("Your theme, language, wishlist, cart, recently viewed parts and saved vehicle are stored in this browser. Clearing browser data removes them. WhatsApp and Google Maps open external services, which apply their own privacy terms. Fonts are requested from Google Fonts. Administrator sign-in uses a session cookie.", "உங்கள் தீம், மொழி, விருப்பப் பட்டியல், கூடை மற்றும் சேமித்த வாகனம் இந்த உலாவியில் சேமிக்கப்படும். உலாவி தரவை அழித்தால் அவை நீக்கப்படும். வாட்ஸ்அப் மற்றும் Google Maps க்கு அவற்றின் தனியுரிமை விதிகள் பொருந்தும்.")}</p><a class="text-link" href="contact.html">${t("Contact Alagar Automobiles", "Alagar Automobiles ஐ தொடர்பு கொள்ளவும்")}${icon("arrow")}</a></article>`,
+        `<article class="panel narrow legal-copy"><h2 id="ordering">${t("Enquiries & ordering", "விசாரணைகள் மற்றும் ஆர்டர்")}</h2><p>${t("Catalogue prices are references from the existing product records. Availability, exact compatibility, delivery costs and final pricing must be confirmed by Alagar Automobiles. Submitting a cart or sending a WhatsApp message is an enquiry and does not confirm a sale. Online payments are unavailable until a payment provider is configured.", "பட்டியல் விலைகள் தற்போதைய பதிவுகளின் குறிப்புகள். கிடைக்கும் நிலை, பொருத்தம், டெலிவரி கட்டணம் மற்றும் இறுதி விலையை Alagar Automobiles உறுதி செய்ய வேண்டும். விசாரணை அனுப்புதல் விற்பனையை உறுதி செய்யாது.")}</p><h2>${t("Returns, refunds & exchanges", "திரும்பப் பெறுதல், பணத்திருப்பம் மற்றும் மாற்றம்")}</h2><p>${t("Contact Alagar Automobiles before placing an order to confirm the applicable return, refund, warranty and exchange terms for your part. No blanket return period or exchange valuation is promised by this website. Old-part exchange enquiries require the team’s review and inspection.", "ஆர்டர் செய்யும் முன் பாகத்திற்கான திரும்பப் பெறுதல், பணத்திருப்பம், உத்தரவாதம் மற்றும் மாற்று விதிகளை Alagar Automobiles உடன் உறுதி செய்யுங்கள். மாற்று விசாரணைகள் குழுவின் ஆய்விற்கு உட்பட்டவை.")}</p><h2 id="privacy">${t("Your information", "உங்கள் தகவல்")}</h2><p>${t("Enquiry forms collect your name, phone number, vehicle/part details and message so Alagar Automobiles can respond. Cart enquiries also collect your delivery preference and address. Do not submit payment credentials or sensitive identity documents. Contact Alagar Automobiles by phone to request correction or deletion of enquiry information.", "விசாரணைக்கு பதிலளிக்க உங்கள் பெயர், கைபேசி எண், வாகனம்/பாகம் விவரங்கள் மற்றும் செய்தி சேகரிக்கப்படும். ஆர்டர் விசாரணைகளில் முகவரியும் பெறப்படும். கட்டண ரகசியங்கள் அல்லது முக்கிய அடையாள ஆவணங்களைச் சமர்ப்பிக்க வேண்டாம்.")}</p><h2 id="google-sign-in">${t("Google sign-in", "Google உள்நுழைவு")}</h2><p>${t("If you choose Google sign-in, we use your Google account identifier, name and verified email to create and protect your Alagar Automobiles customer account. We do not request access to Gmail, Google Drive or your contacts. Google sign-in does not verify a delivery phone number or link earlier phone orders automatically. Google profile photos are not requested or used.", "Google உள்நுழைவைத் தேர்ந்தெடுத்தால், உங்கள் Alagar Automobiles வாடிக்கையாளர் கணக்கை உருவாக்கவும் பாதுகாக்கவும் Google கணக்கு அடையாளம், பெயர் மற்றும் சரிபார்க்கப்பட்ட மின்னஞ்சலைப் பயன்படுத்துவோம். Gmail, Google Drive அல்லது உங்கள் தொடர்புகளுக்கான அணுகலைக் கோரமாட்டோம். Google உள்நுழைவு டெலிவரி தொலைபேசி எண்ணைச் சரிபார்க்காது; முந்தைய தொலைபேசி ஆர்டர்களையும் தானாக இணைக்காது. Google சுயவிவரப் படங்களைக் கோரவோ பயன்படுத்தவோ மாட்டோம்.")}</p><h2>${t("Browser storage & external services", "உலாவி சேமிப்பு மற்றும் வெளிப்புற சேவைகள்")}</h2><p>${t("Your theme, language, wishlist, cart, recently viewed parts and saved vehicle are stored in this browser. Clearing browser data removes them. WhatsApp and Google Maps open external services, which apply their own privacy terms. Fonts are requested from Google Fonts. Customer and administrator sign-in use secure session cookies. The Google sign-in library loads only on the account page when Google sign-in is available.", "உங்கள் தீம், மொழி, விருப்பப் பட்டியல், கூடை மற்றும் சேமித்த வாகனம் இந்த உலாவியில் சேமிக்கப்படும். உலாவி தரவை அழித்தால் அவை நீக்கப்படும். வாட்ஸ்அப் மற்றும் Google Maps க்கு அவற்றின் தனியுரிமை விதிகள் பொருந்தும்.")}</p><a class="text-link" href="contact.html">${t("Contact Alagar Automobiles", "Alagar Automobiles ஐ தொடர்பு கொள்ளவும்")}${icon("arrow")}</a></article>`,
     );
   }
   function renderHelp() {
@@ -1225,7 +1337,9 @@
   };
   document.addEventListener("click", (e) => {
     const add = e.target.closest("[data-add]");
-    if (add) addToCart(add.dataset.add);
+    if (add && !add.disabled) addToCart(add.dataset.add);
+    const buy = e.target.closest("[data-buy]");
+    if (buy && !buy.disabled) buyNow(buy.dataset.buy);
     const wish = e.target.closest("[data-wish]");
     if (wish) toggleWish(wish.dataset.wish);
   });

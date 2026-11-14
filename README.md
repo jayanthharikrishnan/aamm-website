@@ -16,7 +16,7 @@ Open <http://localhost:3000>. No frontend build is required. `npm start` runs th
 
 Before running against business data, back up the actual deployed database and follow [DEPLOYMENT.md](docs/DEPLOYMENT.md). Set an absolute `DB_PATH` on persistent storage in production. Do not repeatedly copy the repository database over a live database.
 
-The owner-selected administrator ID is `9344898473`. Set a unique `ADMIN_PASSWORD` of at least 12 characters in the host secret settings to enable password access at `/admin.html`; an ID alone grants no access. Real administrator OTP additionally requires the configured owner phone and Twilio Verify. Customer phone sign-in requires a configured Twilio Verify account. Confirmation creates an immutable customer commercial invoice; a verified captured payment creates its receipt. Optional transactional SMS uses a separate configured sender/outbox and provider-reported delivery status. Optional OpenAI and Razorpay credentials are described in `.env.example`; missing providers are not simulated.
+The owner-selected administrator ID is `9344898473`. Set a unique `ADMIN_PASSWORD` of at least 12 characters in the host secret settings to enable password access at `/admin.html`; an ID alone grants no access. Real administrator OTP additionally requires the configured owner phone and Twilio Verify. Customer Google sign-in requires a Web application OAuth client ID in `GOOGLE_CLIENT_ID`; see [Google setup](docs/GOOGLE_SIGN_IN.md). Optional phone sign-in requires a configured Twilio Verify account. Confirmation creates an immutable customer commercial invoice; a verified captured payment creates its receipt. Optional transactional SMS uses a separate configured sender/outbox and provider-reported delivery status. Optional OpenAI and Razorpay credentials are described in `.env.example`; missing providers are not simulated.
 
 ## Check the application
 
@@ -50,3 +50,5 @@ The first command runs backend and provider-contract tests with disposable data.
 The light/dark button remembers the visitor's choice in their browser. Catalogue prices and existing records are retained; unknown brands, stock and compatibility are not invented. WhatsApp submissions remain enquiries until the business confirms them.
 
 Render is connected and the existing main-branch service was verified. Its current free plan has no persistent disk; owner ID/origin settings are configured, while provider secrets and durable storage still require setup. Real provider transactions and production persistence have not been verified. The complete master brief includes additional workflows beyond this source update; their exact status and payment/refund limitations are documented in the feature-status report.
+
+Customer accounts use stable server-side user IDs. Entering a delivery phone does not verify or merge a phone account. Buy now checks out the selected part and quantity while preserving the saved cart.

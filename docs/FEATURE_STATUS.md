@@ -42,7 +42,7 @@ This document compares the implementation in this repository with the owner's 30
 | 18. Central business modules | Inventory, orders, enquiries, exchange requests, customers, notifications and activity logs share the same backend/admin interface. No full enquiry-conversion analytics or normalized vehicle hierarchy module. |
 | 19. Motion/interactions | Lightweight hover, theme, navigation, form feedback, assistant and loading states are implemented with reduced-motion support. Complex animation sequences are not a separate business requirement. |
 | 20. Responsive design | Customer and admin layouts are responsive. Browser checks cover 1440px desktop and 390px/320px mobile layouts in both themes; this is not a claim of testing every physical Android/iPhone model. |
-| 21. Backend/database | Express/SQLite retained, original IDs/data preserved, additive v3 schema/indexes, pre-migration snapshot and transaction handling implemented. Schema/migration logic lives in `server.js`; there is no separate general migration CLI or recurring off-server backup service. |
+| 21. Backend/database | Express/SQLite retained, original IDs/data preserved, additive v4 schema/indexes, pre-migration snapshot and transaction handling implemented. Schema/migration logic lives in `server.js`; there is no separate general migration CLI or recurring off-server backup service. |
 | 22. Security | Server role/ownership checks, opaque hashed sessions, secure production cookies, same-origin mutation checks, validation, parameterized SQL, rate limits, restricted static routes and payment verification implemented. No external penetration test or enterprise access-control system. Historical database exposure in Git history requires owner review. |
 | 23. Performance/SEO | Buildless pages, semantic structure, page titles/descriptions, basic social metadata, robots.txt, sitemap.xml, responsive layouts and indexed backend lookups are present. No structured product schema, measured SEO campaign or comprehensive performance benchmark. |
 | 24. Testing | Backend/integration tests and an optional browser suite cover real application behavior with copied databases; see the commands below. Real external SMS/payment/AI/courier transactions and Render durability were not verified. |
@@ -75,7 +75,7 @@ Checks reported for the current source revision:
 
 | Check | Observed result and scope |
 | --- | --- |
-| Backend/provider tests | 41/41 passed using disposable database copies and provider-contract fixtures, including administrator authentication, billing, SMS and diagram mapping checks. |
+| Backend/provider tests | 51/51 passed using disposable database copies and provider-contract fixtures, including administrator authentication, billing, SMS and diagram mapping checks. |
 | Customer browser suite | 15 groups verified across the full run and focused billing rerun, including 16 pages at 1440px, 390px and 320px widths in light and dark themes; no page JavaScript errors or horizontal overflow. Covers light-first persistence, logo inversion, sticky/keyboard-accessible Tamil selection, collapsed combined filters/pagination, direct product guides, wishlist/cart, actual enquiries, business confirmation/invoice printing, private guest tracking and internal links. |
 | Configured OTP/payment UI | Passed with explicitly intercepted API/provider fixtures. Covers invalid/approved codes, resend cooldown, profile/notification actions, Razorpay create/verify/failure/dismiss callbacks, customer invoice listing/print links and signout. These are UI behavior checks, not live SMS or payment transactions. |
 | Component-guide browser checks | Collapsed keyboard guide, play/pause/replay, unknown-location fallback, Tamil, reduced motion and escaping verified by the component suite; integrated product-page states verified in the customer suite. |
@@ -92,3 +92,9 @@ npm run test:browser
 ```
 
 `npm test` uses Node's built-in runner and disposable database copies. `npm run test:browser` runs `frontend-browser.cjs`, the explicitly mocked configured-provider UI suite `account-provider-ui.cjs`, and `part-location-browser.cjs`. The optional browser suite requires Playwright and Chromium installed in the development environment; neither is a production dependency. `CHROMIUM_PATH` may select an existing executable and `AAMM_ARTIFACT_DIR` selects screenshot output. See the test files for their assertions and [DEPLOYMENT.md](DEPLOYMENT.md) for release checks. Provider mocks verify protocol/validation behavior, not live provider readiness.
+
+## Google login and direct checkout update
+
+Google Identity Services sign-in is implemented with the official server verifier, strict audience/issuer/expiry checks and a single-use cookie-bound nonce. Accounts are keyed by verified Google subject, with no automatic linking by email or delivery phone. New customer records use stable account ownership across orders, requests, bills, notifications, tracking and payments. Administrator authentication remains separate. Live Google account sign-in must also satisfy the business OAuth client's actual origin and branding settings; protocol tests use temporary signed fixtures.
+
+Buy now on priced parts opens a single-product checkout using current catalogue data and preserves the existing cart. Unknown prices lead to a quotation request, and known out-of-stock parts cannot be purchased. No unverified payment is represented as successful.

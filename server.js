@@ -6,6 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const providers = require('./lib/integrations');
+const googleAuth = require('./lib/google-auth');
 const businessConfiguration = require('./config/business.json');
 const sms = require('./lib/sms');
 const { renderBill } = require('./lib/billing');
@@ -61,10 +62,10 @@ async function initialize() {
   const integrity = await get('PRAGMA integrity_check');
   if (Object.values(integrity)[0] !== 'ok') throw new Error('Database integrity check failed; original data retained.');
   const oldVersion = (await get('PRAGMA user_version')).user_version;
-  if (oldVersion < 3) {
+  if (oldVersion < 4) {
     const backupDir = path.join(path.dirname(DB_PATH), 'backups');
     fs.mkdirSync(backupDir, { recursive: true });
-    const backupPath = path.join(backupDir, `aamm-before-v3-${Date.now()}.db`);
+    const backupPath = path.join(backupDir, `alagar-before-v4-${Date.now()}.db`);
     await run('VACUUM INTO ?', [backupPath]);
     // VACUUM INTO produces a consistent snapshot before any migration.
   }
@@ -76,7 +77,8 @@ async function initialize() {
     const names = new Set((await all(`PRAGMA table_info(${table})`)).map(row => row.name));
     for (const [name, type] of Object.entries(additions)) if (!names.has(name)) await run(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   };
-  await columns('users',{phone_verified:'INTEGER NOT NULL DEFAULT 0'});
+  await columns('users',{phone_verified:'INTEGER NOT NULL DEFAULT 0',google_sub:'TEXT',google_email:'TEXT',contact_phone:'TEXT'});
+  await run("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL");
   await columns('products', { sku: 'TEXT', brand: 'TEXT', stock_quantity: 'INTEGER', archived: 'INTEGER NOT NULL DEFAULT 0', compatibility_verified: 'INTEGER NOT NULL DEFAULT 0', updated_at: 'TEXT' });
   await columns('orders', { reference: 'TEXT', name: 'TEXT', status: "TEXT NOT NULL DEFAULT 'Legacy order — verification required'", payment_status: "TEXT NOT NULL DEFAULT 'unverified'", idempotency_key: 'TEXT', courier: 'TEXT', tracking_number: 'TEXT', estimated_delivery: 'TEXT', payment_order_id: 'TEXT', tracking_token_hash: 'TEXT', delivery_charges: 'REAL' });
   await run(`CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY,phone TEXT NOT NULL,role TEXT NOT NULL,expires_at INTEGER NOT NULL)`);
@@ -89,6 +91,13 @@ async function initialize() {
   await run(`CREATE TABLE IF NOT EXISTS stock_movements (id INTEGER PRIMARY KEY AUTOINCREMENT,product_id INTEGER NOT NULL,previous_quantity INTEGER,new_quantity INTEGER,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
   await run(`CREATE TABLE IF NOT EXISTS notification_deliveries (id INTEGER PRIMARY KEY AUTOINCREMENT,notification_id INTEGER NOT NULL,channel TEXT NOT NULL DEFAULT 'sms',provider_sid TEXT,status TEXT NOT NULL DEFAULT 'pending',error_code TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT,UNIQUE(notification_id,channel))`);
   await run("UPDATE notification_deliveries SET status='delivery_unknown',error_code='interrupted_send',updated_at=CURRENT_TIMESTAMP WHERE status='sending' AND provider_sid IS NULL");
+  await columns('sessions',{user_id:'INTEGER',auth_provider:"TEXT NOT NULL DEFAULT 'phone'"});
+  for(const table of ['orders','enquiries','exchange_requests','notifications']) {
+    await columns(table,{customer_user_id:'INTEGER'});
+    await run(`CREATE INDEX IF NOT EXISTS ${table}_customer_owner ON ${table}(customer_user_id)`);
+  }
+  await run('CREATE TABLE IF NOT EXISTS google_login_challenges (token_hash TEXT PRIMARY KEY,nonce TEXT NOT NULL,expires_at INTEGER NOT NULL)');
+  await run('DELETE FROM google_login_challenges WHERE expires_at<?',[Date.now()]);
   await billing.initialize();
   await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL');
   await run('CREATE UNIQUE INDEX IF NOT EXISTS orders_reference ON orders(reference) WHERE reference IS NOT NULL');
@@ -98,7 +107,7 @@ async function initialize() {
   await run('CREATE INDEX IF NOT EXISTS exchanges_status ON exchange_requests(status)');
   await run('CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at)');
   await run('DELETE FROM sessions WHERE expires_at < ?', [Date.now()]);
-  await run('PRAGMA user_version = 3');
+  await run('PRAGMA user_version = 4');
 }
 
 app.use((req, res, next) => {
@@ -106,9 +115,10 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.razorpay.com; frame-src https://api.razorpay.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader('Cross-Origin-Opener-Policy','same-origin-allow-popups');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.razorpay.com https://accounts.google.com/gsi/; frame-src https://api.razorpay.com https://www.google.com https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'");
   if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  if (req.path.startsWith('/admin/') || req.path.startsWith('/auth/') || req.path.startsWith('/users/') || req.path.startsWith('/orders') || req.path.startsWith('/tracking') || req.path.startsWith('/notifications') || req.path.startsWith('/my/') || req.path.startsWith('/bills/') || req.path.startsWith('/billing/')) res.setHeader('Cache-Control', 'no-store');
+  if (req.path.startsWith('/admin/') || req.path.startsWith('/auth/') || req.path.startsWith('/users/') || req.path.startsWith('/orders') || req.path.startsWith('/tracking') || req.path.startsWith('/notifications') || req.path === '/me' || req.path.startsWith('/my/') || req.path.startsWith('/bills/') || req.path.startsWith('/billing/')) res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     const origin = req.get('origin');
     const allowedOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
@@ -140,24 +150,53 @@ app.use(async (req, res, next) => {
     const cookie = (req.headers.cookie || '').split(';').map(v => v.trim()).find(v => v.startsWith('aamm_session='));
     if (cookie) {
       const token = cookie.slice('aamm_session='.length);
-      if (/^[a-f0-9]{64}$/.test(token)) req.session = await get('SELECT phone,role FROM sessions WHERE token_hash=? AND expires_at>?', [hashToken(token), Date.now()]);
+      if (/^[a-f0-9]{64}$/.test(token)) req.session = await get('SELECT phone,role,user_id,auth_provider FROM sessions WHERE token_hash=? AND expires_at>?', [hashToken(token), Date.now()]);
+      if(req.session?.role==='customer') {
+        req.customer=req.session.user_id?await get('SELECT * FROM users WHERE id=?',[req.session.user_id]):await get('SELECT * FROM users WHERE phone=? AND google_sub IS NULL',[req.session.phone]);
+        if(!req.customer) req.session=null;
+        else req.session.user_id=req.customer.id;
+      }
     }
     next();
   } catch (err) { next(err); }
 });
 const admin = (req, res, next) => req.session?.role === 'admin' ? next() : res.status(401).json({ error: 'Administrator sign-in required.' });
 const customer = (req, res, next) => req.session ? next() : res.status(401).json({ error: 'Sign in to access your account.' });
-async function createSession(req, res, phone, role) {
-  const token = crypto.randomBytes(32).toString('hex');
-  await run('INSERT INTO sessions(token_hash,phone,role,expires_at) VALUES (?,?,?,?)', [hashToken(token), phone, role, Date.now() + 8 * 60 * 60 * 1000]);
-  res.cookie('aamm_session', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000, path: '/' });
+async function createSession(req,res,phone,role,user=null) {
+  if(role==='customer'&&!user)user=await get('SELECT * FROM users WHERE phone=? AND google_sub IS NULL',[phone]);
+  if(role==='customer'&&!user)throw fail(401,'Sign in to access your account.');
+  const provider=role==='admin'?'admin':user.google_sub?'google':'phone';
+  const principal=provider==='google'?`google:${user.id}`:phone;
+  const token=crypto.randomBytes(32).toString('hex');
+  await run('INSERT INTO sessions(token_hash,phone,role,expires_at,user_id,auth_provider) VALUES (?,?,?,?,?,?)',[hashToken(token),principal,role,Date.now()+8*60*60*1000,user?.id||null,provider]);
+  res.cookie('aamm_session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:8*60*60*1000,path:'/'});
 }
-const publicUser = u => u && ({ id: u.id, phone: u.phone, name: u.name, address: u.address, email: u.email, delivery_pref: u.delivery_pref });
+const publicUser=u=>u&&({id:u.id,phone:u.phone||null,contact_phone:u.contact_phone||u.phone||'',name:u.name||'',address:u.address||'',delivery_pref:u.delivery_pref||'',email:u.google_email||u.email||'',auth_provider:u.google_sub?'google':'phone',email_verified:Boolean(u.google_sub&&u.google_email),phone_verified:u.phone_verified===1,contact_phone_verified:Boolean(u.phone_verified===1&&u.phone&&(!u.contact_phone||u.contact_phone===u.phone))});
+function verifiedPhoneSession(req){return Boolean(req.session?.role==='customer'&&req.session.auth_provider!=='google'&&req.customer?.phone_verified===1&&req.customer.phone===req.session.phone);}
+function ownerClause(req,alias='') {
+  const prefix=alias?alias+'.':'';
+  if(req.session?.role==='admin')return {sql:`(${prefix}customer_user_id IS NULL AND ${prefix}phone=?)`,args:[req.session.phone]};
+  if(!req.customer)return {sql:'0=1',args:[]};
+  return verifiedPhoneSession(req)?{sql:`(${prefix}customer_user_id=? OR (${prefix}customer_user_id IS NULL AND ${prefix}phone=?))`,args:[req.customer.id,req.customer.phone]}:{sql:`${prefix}customer_user_id=?`,args:[req.customer.id]};
+}
+function ownsOrder(req,order){if(!order)return false;if(req.session?.role==='admin')return true;if(order.customer_user_id!=null)return Number(order.customer_user_id)===req.customer?.id;return verifiedPhoneSession(req)&&order.phone===req.customer.phone;}
+async function currentProfile(req){if(req.session.role==='admin')return adminUser();if(!req.customer)throw fail(401,'Sign in to access your account.');return publicUser(req.customer);}
+async function updateProfile(req,res) {
+  if(!req.customer)throw fail(403,'Use the owner dashboard for administrator settings.');
+  const phone=phoneNumber(req.body.contact_phone??req.customer.contact_phone??'');
+  if(phone&&!validPhone(phone))throw fail(400,'Enter a valid Indian delivery contact number.');
+  const delivery=clean(req.body.delivery_pref??req.customer.delivery_pref,50);
+  if(!['','pickup','bus','lorry'].includes(delivery))throw fail(400,'Choose a valid delivery preference.');
+  await run('UPDATE users SET name=?,address=?,delivery_pref=?,email=?,contact_phone=? WHERE id=?',[clean(req.body.name??req.customer.name,100),clean(req.body.address??req.customer.address,1000),delivery,req.customer.google_sub?req.customer.email:clean(req.body.email??req.customer.email,200),phone||null,req.customer.id]);
+  res.json({ok:true});
+}
 const audit = (req, action, entity, id, details = {}) => run('INSERT INTO audit_logs(actor,action,entity,entity_id,details) VALUES (?,?,?,?,?)', [req.session?.phone || 'system', action, entity, String(id ?? ''), JSON.stringify(details)]);
 async function notify(phone, title, message, reference, options={}) {
-  const result=await run('INSERT INTO notifications(phone,title,message,reference) VALUES (?,?,?,?)',[phone,title,message,reference]);
-  const recipient=sms.smsConfigured()&&options.sms!==false&&validPhone(phoneNumber(phone))?await get('SELECT phone_verified FROM users WHERE phone=?',[phoneNumber(phone)]):null;
-  if(recipient?.phone_verified===1) await run("INSERT INTO notification_deliveries(notification_id,channel,status) VALUES (?,'sms','pending')",[result.lastID]);
+  let owner=options.customer_user_id??null;
+  if(owner===null&&reference){const order=await findOrderReference(reference);if(order)owner=order.customer_user_id??null;else{const enquiry=await get('SELECT customer_user_id FROM enquiries WHERE reference=?',[reference])||await get('SELECT customer_user_id FROM exchange_requests WHERE reference=?',[reference]);owner=enquiry?.customer_user_id??null;}}
+  const result=await run('INSERT INTO notifications(phone,title,message,reference,customer_user_id) VALUES (?,?,?,?,?)',[phone,title,message,reference,owner]);
+  const recipient=sms.smsConfigured()&&options.sms!==false&&validPhone(phoneNumber(phone))?await get('SELECT id,phone_verified FROM users WHERE phone=?',[phoneNumber(phone)]):null;
+  if(recipient?.phone_verified===1&&(owner===null||owner===recipient.id)) await run("INSERT INTO notification_deliveries(notification_id,channel,status) VALUES (?,'sms','pending')",[result.lastID]);
   return result;
 }
 const billing=createBillingStore({run,get,all,fail,notify,business});
@@ -183,9 +222,9 @@ async function dispatchSmsOutbox() {
   smsDispatching=true;
   try {
     for(let count=0;count<10;count++) {
-      const item=await transaction(async()=>{const next=await get("SELECT d.*,n.phone,n.title,n.message,n.reference FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id WHERE d.status='pending' ORDER BY d.id LIMIT 1");if(next) await run("UPDATE notification_deliveries SET status='sending',updated_at=CURRENT_TIMESTAMP WHERE id=?",[next.id]);return next;});
+      const item=await transaction(async()=>{const next=await get("SELECT d.*,n.phone,n.title,n.message,n.reference,n.customer_user_id FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id WHERE d.status='pending' ORDER BY d.id LIMIT 1");if(next) await run("UPDATE notification_deliveries SET status='sending',updated_at=CURRENT_TIMESTAMP WHERE id=?",[next.id]);return next;});
       if(!item) break;
-      const recipient=await get('SELECT phone_verified FROM users WHERE phone=?',[phoneNumber(item.phone)]);if(recipient?.phone_verified!==1){await run("UPDATE notification_deliveries SET status='not_sent_unverified',updated_at=CURRENT_TIMESTAMP WHERE id=?",[item.id]);continue;}
+      const recipient=await get('SELECT id,phone_verified FROM users WHERE phone=?',[phoneNumber(item.phone)]);if(recipient?.phone_verified!==1||(item.customer_user_id!=null&&item.customer_user_id!==recipient.id)){await run("UPDATE notification_deliveries SET status='not_sent_unverified',updated_at=CURRENT_TIMESTAMP WHERE id=?",[item.id]);continue;}
       try { const result=await sms.sendSms(item.phone,`Alagar Automobiles: ${item.title}. ${item.message||''}${item.reference?' Reference: '+displayReference(item.reference):''}`.slice(0,1000)); await transaction(async()=>{await run('UPDATE notification_deliveries SET provider_sid=?,status=?,error_code=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[result.sid,result.status,result.error_code,item.id]);await run('UPDATE notifications SET delivery_status=? WHERE id=?',[`sms_${result.status}`,item.notification_id]);}); }
       catch(error) { await run("UPDATE notification_deliveries SET status='failed',error_code=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",[error.code||'provider_error',item.id]); }
     }
@@ -235,7 +274,7 @@ async function searchProducts(query = {}) {
 }
 
 app.get('/health', async (req, res) => { await get('SELECT 1'); res.json({ status: 'ok', database: 'ready', persistence_configuration: process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH) ? 'explicit_path_configured' : 'not_verified' }); });
-app.get('/api/config', (req, res) => res.json({ business, admin:{password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()}, features: { otp: providers.otpConfigured(), payments: providers.paymentsConfigured(), ai: providers.aiConfigured(), image_uploads: false, billing:true, sms:sms.smsConfigured() }, integration_status: { otp: providers.otpConfigured() ? 'configured' : 'not_configured', payments: providers.paymentsConfigured() ? 'configured' : 'not_configured', ai: providers.aiConfigured() ? 'configured' : 'not_configured', image_uploads: 'not_configured', courier: 'internal_status_updates', notifications: sms.smsConfigured()?'in_app_and_sms_configured':'in_app_only' } }));
+app.get('/api/config', (req, res) => res.json({ business, google:{configured:googleAuth.configured(),client_id:googleAuth.configured()?googleAuth.clientId():null}, admin:{password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()}, features: { google:googleAuth.configured(), otp: providers.otpConfigured(), payments: providers.paymentsConfigured(), ai: providers.aiConfigured(), image_uploads: false, billing:true, sms:sms.smsConfigured() }, integration_status: { google:googleAuth.configured()?'configured':'not_configured', otp: providers.otpConfigured() ? 'configured' : 'not_configured', payments: providers.paymentsConfigured() ? 'configured' : 'not_configured', ai: providers.aiConfigured() ? 'configured' : 'not_configured', image_uploads: 'not_configured', courier: 'internal_status_updates', notifications: sms.smsConfigured()?'in_app_and_sms_configured':'in_app_only' } }));
 app.get('/products', async (req, res) => res.json(await searchProducts(req.query)));
 app.get('/products/categories', async (req, res) => res.json((await all('SELECT DISTINCT category FROM products WHERE archived=0 AND category IS NOT NULL ORDER BY category')).map(r => r.category)));
 app.get('/products/subcategories', async (req, res) => res.json((await all('SELECT DISTINCT subcategory FROM products WHERE archived=0' + (req.query.category ? ' AND category=?' : '') + ' ORDER BY subcategory', req.query.category ? [clean(req.query.category, 200)] : [])).map(r => r.subcategory)));
@@ -281,6 +320,25 @@ app.post('/auth/admin-otp/verify', async(req,res)=>{
   if(!await providers.verifyOtp(adminPhone(),code)) throw fail(401,'The code is invalid or has expired.');
   const principal=adminPrincipal();await createSession(req,res,principal,'admin');await audit({session:{phone:principal}},'otp_login','administrator',principal);res.json({user:adminUser(),isAdmin:true});
 });
+const googleChallengeCookie='aa_google_challenge';
+const googleCookieOptions={httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/auth/google'};
+const googleChallengeToken=req=>(req.headers.cookie||'').split(';').map(value=>value.trim()).find(value=>value.startsWith(googleChallengeCookie+'='))?.slice(googleChallengeCookie.length+1)||'';
+app.post('/auth/google/challenge',async(req,res)=>{
+  if(!googleAuth.configured())throw fail(503,'Google sign-in is not available yet. Please continue as a guest.');
+  const token=crypto.randomBytes(32).toString('hex'),nonce=crypto.randomBytes(32).toString('hex'),previous=googleChallengeToken(req);
+  await transaction(async()=>{await run('DELETE FROM google_login_challenges WHERE expires_at<?',[Date.now()]);if(/^[a-f0-9]{64}$/.test(previous))await run('DELETE FROM google_login_challenges WHERE token_hash=?',[hashToken(previous)]);await run('INSERT INTO google_login_challenges(token_hash,nonce,expires_at) VALUES (?,?,?)',[hashToken(token),nonce,Date.now()+300000]);});
+  res.cookie(googleChallengeCookie,token,{...googleCookieOptions,maxAge:300000});res.json({nonce,expires_in:300});
+});
+app.post('/auth/google',async(req,res)=>{
+  if(!googleAuth.configured())throw fail(503,'Google sign-in is not available yet. Please continue as a guest.');
+  const token=googleChallengeToken(req);res.clearCookie(googleChallengeCookie,googleCookieOptions);
+  if(!/^[a-f0-9]{64}$/.test(token))throw fail(401,'Start Google sign-in again to continue.');
+  const challenge=await transaction(async()=>{const value=await get('SELECT * FROM google_login_challenges WHERE token_hash=?',[hashToken(token)]);if(value)await run('DELETE FROM google_login_challenges WHERE token_hash=?',[hashToken(token)]);return value;});
+  if(!challenge||challenge.expires_at<Date.now())throw fail(401,'Google sign-in expired. Please try again.');
+  const identity=await googleAuth.verifyCredential(req.body.credential,challenge.nonce);
+  const user=await transaction(async()=>{let account=await get('SELECT * FROM users WHERE google_sub=?',[identity.sub]);if(!account){const inserted=await run('INSERT INTO users(phone,name,email,google_sub,google_email,phone_verified) VALUES (NULL,?,?,?,?,0)',[identity.name,identity.email,identity.sub,identity.email]);account=await get('SELECT * FROM users WHERE id=?',[inserted.lastID]);}else{await run('UPDATE users SET google_email=? WHERE id=?',[identity.email,account.id]);account.google_email=identity.email;}return account;});
+  await createSession(req,res,null,'customer',user);res.json({user:publicUser(user),isAdmin:false});
+});
 app.post('/auth/login', requestOtp);
 app.post('/auth/otp/request', requestOtp);
 app.post('/auth/otp/verify', async (req, res) => {
@@ -292,10 +350,12 @@ app.post('/auth/otp/verify', async (req, res) => {
   await createSession(req, res, phone, 'customer');
   res.json({ user: publicUser(await get('SELECT * FROM users WHERE phone=?', [phone])), isAdmin: false });
 });
-app.get('/auth/me', customer, async (req, res) => res.json({ user: req.session.role === 'admin' ? adminUser() : publicUser(await get('SELECT * FROM users WHERE phone=?', [req.session.phone])), isAdmin: req.session.role === 'admin' }));
-app.post('/auth/logout', async (req, res) => { const cookie = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('aamm_session=')); if (cookie) await run('DELETE FROM sessions WHERE token_hash=?', [hashToken(cookie.slice(13))]); res.clearCookie('aamm_session', { path: '/' }); res.json({ ok: true }); });
-app.get('/users/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can access only your own profile.'); const user = await get('SELECT * FROM users WHERE phone=?', [phone]); if (!user) throw fail(404, 'Profile not found.'); res.json(publicUser(user)); });
-app.put('/users/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can edit only your own profile.'); await run('UPDATE users SET name=?,address=?,delivery_pref=?,email=? WHERE phone=?', [clean(req.body.name, 100), clean(req.body.address, 1000), clean(req.body.delivery_pref, 50), clean(req.body.email, 200), phone]); res.json({ ok: true }); });
+app.get('/auth/me',customer,async(req,res)=>res.json({user:await currentProfile(req),isAdmin:req.session.role==='admin'}));
+app.get('/me',customer,async(req,res)=>res.json(await currentProfile(req)));
+app.put('/me',customer,updateProfile);
+app.post('/auth/logout',async(req,res)=>{const cookie=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('aamm_session='));if(cookie)await run('DELETE FROM sessions WHERE token_hash=?',[hashToken(cookie.slice(13))]);res.clearCookie('aamm_session',{path:'/'});res.json({ok:true});});
+app.get('/users/:phone',customer,async(req,res)=>{const phone=phoneNumber(req.params.phone);if(req.session.role!=='admin'&&(!verifiedPhoneSession(req)||phone!==req.customer.phone))throw fail(403,'You can access only your verified phone profile.');const user=await get('SELECT * FROM users WHERE phone=? AND google_sub IS NULL',[phone]);if(!user)throw fail(404,'Profile not found.');res.json(publicUser(user));});
+app.put('/users/:phone',customer,async(req,res)=>{const phone=phoneNumber(req.params.phone);if(req.session.role==='admin'){await run('UPDATE users SET name=?,address=?,delivery_pref=?,email=? WHERE phone=? AND google_sub IS NULL',[clean(req.body.name,100),clean(req.body.address,1000),clean(req.body.delivery_pref,50),clean(req.body.email,200),phone]);return res.json({ok:true});}if(!verifiedPhoneSession(req)||phone!==req.customer.phone)throw fail(403,'You can edit only your verified phone profile.');return updateProfile(req,res);});
 
 async function validateCart(items) {
   if (!Array.isArray(items) || !items.length || items.length > 100) throw fail(400, 'Add at least one product, up to 100 products.');
@@ -328,15 +388,17 @@ app.post('/orders', submissionLimit, async (req, res) => { const response = awai
   if (!/pickup|collect/i.test(delivery) && !address) throw fail(400, 'Enter your delivery address.');
   const key = clean(req.body.idempotency_key, 100);
   if (key && !/^[A-Za-z0-9_-]{8,100}$/.test(key)) throw fail(400, 'Invalid order request identifier.');
-  if (key) { const previous = await get('SELECT * FROM orders WHERE idempotency_key=?', [key]); if (previous) { if (previous.phone !== phone) throw fail(409, 'This request identifier is already in use.'); return { status: 200, data: orderResponse(previous) }; } }
+  if (key) { const previous = await get('SELECT * FROM orders WHERE idempotency_key=?', [key]); if (previous) { if (previous.phone !== phone || (previous.customer_user_id!=null&&!ownsOrder(req,previous))) throw fail(409, 'This request identifier is already in use.'); return { status: 200, data: orderResponse(previous) }; } }
   const cart = await validateCart(req.body.items); const reference = `AA-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
   const trackingToken = crypto.randomBytes(32).toString('hex');
-  const result = await run('INSERT INTO orders(phone,name,items,total,delivery,address,reference,status,payment_status,idempotency_key,tracking_token_hash,delivery_charges) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [phone, name, JSON.stringify(cart.items), cart.total, delivery, address, reference, 'Enquiry submitted', 'not_requested', key || null, hashToken(trackingToken), /pickup|collect/i.test(delivery)?0:null]);
+  const result = await run('INSERT INTO orders(phone,name,items,total,delivery,address,reference,status,payment_status,idempotency_key,tracking_token_hash,delivery_charges,customer_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [phone, name, JSON.stringify(cart.items), cart.total, delivery, address, reference, 'Enquiry submitted', 'not_requested', key || null, hashToken(trackingToken), /pickup|collect/i.test(delivery)?0:null,req.customer?.id||null]);
   await run('INSERT INTO order_status_history(order_id,status,actor) VALUES (?,?,?)', [result.lastID, 'Enquiry submitted', 'customer enquiry']);
-  await notify(phone, 'Order enquiry received', 'Alagar Automobiles will confirm availability and the final total.', reference,{sms:Boolean(req.session&&(req.session.role==='admin'||req.session.phone===phone))});
+  await notify(phone, 'Order enquiry received', 'Alagar Automobiles will confirm availability and the final total.', reference,{sms:Boolean(req.session&&(req.session.role==='admin'||verifiedPhoneSession(req)&&req.customer.phone===phone)),customer_user_id:req.customer?.id||null});
   return { status: 201, data: { ...orderResponse(await get('SELECT * FROM orders WHERE id=?', [result.lastID])), tracking_token: trackingToken } };
 }); res.status(response.status).json(response.data); });
-app.get('/orders/:phone', customer, async (req, res) => { const phone = phoneNumber(req.params.phone); if (req.session.role !== 'admin' && phone !== req.session.phone) throw fail(403, 'You can access only your own orders.'); res.json((await all('SELECT * FROM orders WHERE phone=? ORDER BY ordered_at DESC', [phone])).map(o => { const { tracking_token_hash,...safe }=o; return { ...safe, reference:displayReference(safe.reference),items: JSON.parse(o.items || '[]') }; })); });
+function safeOrder(order){const {tracking_token_hash,customer_user_id,...safe}=order;return {...safe,reference:displayReference(order.reference),items:JSON.parse(order.items||'[]')};}
+app.get('/my/orders',customer,async(req,res)=>{const owner=ownerClause(req);res.json((await all(`SELECT * FROM orders WHERE ${owner.sql} ORDER BY id DESC LIMIT 1000`,owner.args)).map(safeOrder));});
+app.get('/orders/:phone',customer,async(req,res)=>{const phone=phoneNumber(req.params.phone);if(req.session.role!=='admin'&&(!verifiedPhoneSession(req)||phone!==req.customer.phone))throw fail(403,'Sign in with a verified phone account to access these orders.');const owner=req.session.role==='admin'?{sql:'1=1',args:[]}:ownerClause(req);res.json((await all(`SELECT * FROM orders WHERE phone=? AND ${owner.sql} ORDER BY id DESC LIMIT 1000`,[phone,...owner.args])).map(safeOrder));});
 // A guest needs both the reference and the unguessable receipt secret. The
 // secret is issued once, stored only as a hash, and never placed in a URL.
 async function authorizedGuestOrder(referenceValue,tokenValue) {
@@ -359,26 +421,23 @@ app.post('/billing/guest',rateLimit('guest-billing',30,15*60*1000),async(req,res
   const meta=(await billing.listForOrder(order.id)).find(bill=>bill.kind===kind);if(!meta) throw fail(404,kind==='receipt'?'No verified payment receipt has been issued.':'No commercial invoice has been issued yet.');
   const document=await billing.document(meta.id);res.type('html').send(renderBill(document));
 });
-app.post('/tracking', customer, async (req, res) => { const order = await findOrderReference(req.body.reference); if (!order || (req.session.role !== 'admin' && order.phone !== req.session.phone)) throw fail(404, 'Order not found in your account.'); res.json({ ...orderResponse(order), courier: order.courier, tracking_number: order.tracking_number, estimated_delivery: order.estimated_delivery, tracking_type: 'internal', history: await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [order.id]) }); });
+app.post('/tracking', customer, async (req, res) => { const order = await findOrderReference(req.body.reference); if (!order || !ownsOrder(req,order)) throw fail(404, 'Order not found in your account.'); res.json({ ...orderResponse(order), courier: order.courier, tracking_number: order.tracking_number, estimated_delivery: order.estimated_delivery, tracking_type: 'internal', history: await all('SELECT status,created_at FROM order_status_history WHERE order_id=? ORDER BY id', [order.id]) }); });
 
 async function submitRequest(req, res, table, prefix) {
   const name = clean(req.body.name, 100); const phone = phoneNumber(req.body.phone); const part = clean(req.body.part_name || req.body.part || req.body.partName, 200);
   if (!name || !validPhone(phone) || !part) throw fail(400, 'Your name, valid phone number and spare-part name are required.');
   const reference = `${prefix}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
-  const columns = ['reference','name','phone','part_name','vehicle','message']; const values = [reference,name,phone,part,clean(req.body.vehicle, 200),clean(req.body.message || req.body.description, 2000)];
+  const columns = ['reference','name','phone','part_name','vehicle','message','customer_user_id']; const values = [reference,name,phone,part,clean(req.body.vehicle, 200),clean(req.body.message || req.body.description, 2000),req.customer?.id||null];
   if (table === 'exchange_requests') { columns.push('condition'); values.push(clean(req.body.condition, 500)); }
   const result = await run(`INSERT INTO ${table}(${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`, values);
-  await notify(phone, prefix === 'ENQ' ? 'Spare-part request received' : 'Exchange request received', 'Alagar Automobiles will review your request and contact you.', reference,{sms:Boolean(req.session&&(req.session.role==='admin'||req.session.phone===phone))});
+  await notify(phone, prefix === 'ENQ' ? 'Spare-part request received' : 'Exchange request received', 'Alagar Automobiles will review your request and contact you.', reference,{sms:Boolean(req.session&&(req.session.role==='admin'||verifiedPhoneSession(req)&&req.customer.phone===phone)),customer_user_id:req.customer?.id||null});
   res.status(201).json({ id: result.lastID, reference, status: 'New' });
 }
 app.post('/enquiries', submissionLimit, (req, res) => submitRequest(req, res, 'enquiries', 'ENQ'));
 app.post('/exchange-requests', submissionLimit, (req, res) => submitRequest(req, res, 'exchange_requests', 'EXC'));
-app.get('/my/requests', customer, async (req,res) => res.json({
-  enquiries: await all('SELECT id,reference,part_name,vehicle,status,quotation_amount,created_at,updated_at FROM enquiries WHERE phone=? ORDER BY id DESC LIMIT 100',[req.session.phone]),
-  exchanges: await all('SELECT id,reference,part_name,vehicle,condition,status,valuation,created_at,updated_at FROM exchange_requests WHERE phone=? ORDER BY id DESC LIMIT 100',[req.session.phone])
-}));
-app.get('/notifications', customer, async (req, res) => res.json((await all('SELECT * FROM notifications WHERE phone=? ORDER BY id DESC LIMIT 100', [req.session.phone])).map(notificationRow)));
-app.patch('/notifications/:id', customer, async (req, res) => { await run('UPDATE notifications SET is_read=1 WHERE id=? AND phone=?', [req.params.id, req.session.phone]); res.json({ ok: true }); });
+app.get('/my/requests',customer,async(req,res)=>{const owner=ownerClause(req);res.json({enquiries:await all(`SELECT id,reference,part_name,vehicle,status,quotation_amount,created_at,updated_at FROM enquiries WHERE ${owner.sql} ORDER BY id DESC LIMIT 100`,owner.args),exchanges:await all(`SELECT id,reference,part_name,vehicle,condition,status,valuation,created_at,updated_at FROM exchange_requests WHERE ${owner.sql} ORDER BY id DESC LIMIT 100`,owner.args)});});
+app.get('/notifications',customer,async(req,res)=>{const owner=ownerClause(req);res.json((await all(`SELECT * FROM notifications WHERE ${owner.sql} ORDER BY id DESC LIMIT 100`,owner.args)).map(notificationRow));});
+app.patch('/notifications/:id',customer,async(req,res)=>{const owner=ownerClause(req);await run(`UPDATE notifications SET is_read=1 WHERE id=? AND ${owner.sql}`,[req.params.id,...owner.args]);res.json({ok:true});});
 
 app.post('/assistant', rateLimit('assistant', 30, 15 * 60 * 1000), async (req, res) => {
   const question = clean(req.body.message || req.body.question, 1000); if (!question) throw fail(400, 'Enter a question about spare parts.');
@@ -394,7 +453,7 @@ app.post('/assistant', rateLimit('assistant', 30, 15 * 60 * 1000), async (req, r
 app.post('/payments/create', customer, async (req, res) => { const payload=await transaction(async () => {
   if (!providers.paymentsConfigured()) throw fail(503, 'Online payments are not configured. Please contact Alagar Automobiles.');
   const order = await findOrderReference(req.body.reference);
-  if (!order || (req.session.role !== 'admin' && order.phone !== req.session.phone)) throw fail(404, 'Order not found in your account.');
+  if (!order || !ownsOrder(req,order)) throw fail(404, 'Order not found in your account.');
   if (order.status !== 'Order Confirmed') throw fail(409, 'Alagar Automobiles must confirm the order and final price before payment.');
   if (!/pickup|collect/i.test(order.delivery)) throw fail(409, 'Online payment currently supports store pickup; delivery charges require Alagar Automobiles confirmation.');
   const existing = await get("SELECT * FROM payments WHERE order_id=? AND status IN ('created','captured','captured_review_required') ORDER BY id DESC LIMIT 1", [order.id]);
@@ -446,8 +505,8 @@ app.post('/payments/verify', customer, async (req,res) => {
   if (!providers.paymentsConfigured()) throw fail(503, 'Online payments are not configured.');
   const providerOrderId = clean(req.body.razorpay_order_id || req.body.order_id,100);
   const providerPaymentId = clean(req.body.razorpay_payment_id || req.body.payment_id,100);
-  const payment = await get('SELECT p.*,o.phone FROM payments p JOIN orders o ON o.id=p.order_id WHERE p.provider_order_id=?',[providerOrderId]);
-  if (!payment || (req.session.role !== 'admin' && payment.phone !== req.session.phone)) throw fail(404,'Payment not found in your account.');
+  const payment = await get('SELECT p.*,o.phone,o.customer_user_id FROM payments p JOIN orders o ON o.id=p.order_id WHERE p.provider_order_id=?',[providerOrderId]);
+  if (!payment || !ownsOrder(req,payment)) throw fail(404,'Payment not found in your account.');
   if (!providers.verifyPaymentSignature({order_id:providerOrderId,payment_id:providerPaymentId,signature:req.body.razorpay_signature||req.body.signature})) throw fail(400,'Payment signature verification failed.');
   const actual = await providers.razorpayGetPayment(providerPaymentId);
   res.json(await recordCapturedPayment(payment,actual));
@@ -463,13 +522,13 @@ app.post('/payments/webhook', async (req,res) => {
   await recordCapturedPayment(payment,actual); res.json({ok:true});
 });
 
-app.get('/my/bills',customer,async(req,res)=>res.json(await billing.list(req.session.phone)));
-app.get('/bills/:id/print',customer,async(req,res)=>{const document=await billing.document(req.params.id);if(req.session.role!=='admin'&&document.phone!==req.session.phone) throw fail(404,'Bill not found in your account.');res.type('html').send(renderBill(document));});
+app.get('/my/bills',customer,async(req,res)=>{const owner=ownerClause(req,'o');res.json((await all(`SELECT b.* FROM billing_documents b JOIN orders o ON o.id=b.order_id WHERE ${owner.sql} ORDER BY b.id DESC LIMIT 1000`,owner.args)).map(billing.metadata));});
+app.get('/bills/:id/print',customer,async(req,res)=>{const document=await billing.document(req.params.id);const order=await get('SELECT * FROM orders WHERE id=?',[document.order_id]);if(!ownsOrder(req,order))throw fail(404,'Bill not found in your account.');res.type('html').send(renderBill(document));});
 app.use('/admin', admin);
 app.get('/admin/setup',async(req,res)=>{
   const missing=names=>names.filter(name=>!process.env[name]?.trim());
   const smsMissing=missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN']);if(!process.env.TWILIO_FROM_NUMBER&&!process.env.TWILIO_MESSAGING_SERVICE_SID) smsMissing.push('TWILIO_FROM_NUMBER or TWILIO_MESSAGING_SERVICE_SID');
-  res.json({admin:{id_configured:Boolean(adminId()),phone_configured:Boolean(adminPhone()),password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()},services:{otp:{configured:providers.otpConfigured(),missing:missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_VERIFY_SERVICE_SID'])},sms:{configured:sms.smsConfigured(),missing:smsMissing},payments:{configured:providers.paymentsConfigured(),missing:missing(['RAZORPAY_KEY_ID','RAZORPAY_KEY_SECRET','RAZORPAY_WEBHOOK_SECRET'])},ai:{configured:providers.aiConfigured(),missing:missing(['OPENAI_API_KEY'])}},billing:{enabled:true,invoice_type:'commercial_invoice',tax_invoice:false},storage:{explicit_path_configured:Boolean(process.env.DB_PATH&&path.isAbsolute(process.env.DB_PATH)),production:process.env.NODE_ENV==='production',persistence_verified:false}});
+  res.json({admin:{id_configured:Boolean(adminId()),phone_configured:Boolean(adminPhone()),password_configured:adminPasswordConfigured(),otp_configured:adminOtpConfigured()},services:{google:{configured:googleAuth.configured(),missing:googleAuth.configured()?[]:['GOOGLE_CLIENT_ID']},otp:{configured:providers.otpConfigured(),missing:missing(['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_VERIFY_SERVICE_SID'])},sms:{configured:sms.smsConfigured(),missing:smsMissing},payments:{configured:providers.paymentsConfigured(),missing:missing(['RAZORPAY_KEY_ID','RAZORPAY_KEY_SECRET','RAZORPAY_WEBHOOK_SECRET'])},ai:{configured:providers.aiConfigured(),missing:missing(['OPENAI_API_KEY'])}},billing:{enabled:true,invoice_type:'commercial_invoice',tax_invoice:false},storage:{explicit_path_configured:Boolean(process.env.DB_PATH&&path.isAbsolute(process.env.DB_PATH)),production:process.env.NODE_ENV==='production',persistence_verified:false}});
 });
 app.get('/admin/bills',async(req,res)=>res.json(await billing.list()));
 app.post('/admin/orders/:id/invoice',async(req,res)=>{const document=await transaction(async()=>{const order=await get('SELECT * FROM orders WHERE id=?',[req.params.id]);if(!order) throw fail(404,'Order not found.');const bill=await billing.issueInvoice(order);if(bill.created)await audit(req,'invoice_issued','order',order.id,{number:bill.number});return bill;});res.status(document.created?201:200).json(document);});

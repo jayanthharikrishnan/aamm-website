@@ -29,7 +29,7 @@ const server = http.createServer(async (request,response) => {
     const pageErrors=[];page.on('pageerror',error=>pageErrors.push(error.message));
     let authenticated=false,notificationRead=false,verifyMode='rejected';
     const calls=[];
-    const user={id:1,phone:'9990000002',name:'UI Test Customer',email:'',address:'Test delivery address',delivery_pref:'pickup'};
+    const user={id:1,phone:'9990000002',name:'UI Test Customer',email:'',address:'Test delivery address',delivery_pref:'pickup',auth_provider:'phone',phone_verified:true,email_verified:false,contact_phone:'9990000002'};
     const order={id:1,reference:'AA-MOCKED-UI-ORDER',ordered_at:'2026-11-13 08:00:00',status:'Order Confirmed',payment_status:'not_requested',total:700};
     await page.addInitScript(() => {
       // A local checkout double exposes the callbacks used by the real page.
@@ -51,13 +51,13 @@ const server = http.createServer(async (request,response) => {
       else if(endpoint==='/auth/otp/request'){assert.deepEqual(body,{phone:user.phone});data={status:'pending',resend_after:1};}
       else if(endpoint==='/auth/otp/verify'){assert.equal(body.phone,user.phone);if(body.code!=='654321'){status=401;data={error:'The code is invalid or has expired.'};}else{authenticated=true;data={user,isAdmin:false};}}
       else if(endpoint==='/auth/logout'){authenticated=false;data={ok:true};}
-      else if(endpoint==='/orders/'+user.phone)data=[order];
+      else if(endpoint==='/my/orders')data=[order];
       else if(endpoint==='/notifications')data=[{id:3,title:'Order confirmed',message:'Alagar Automobiles has reviewed your enquiry.',reference:order.reference,created_at:'2026-11-13 08:00:00',delivery_status:'in_app',is_read:notificationRead?1:0}];
       else if(endpoint==='/notifications/3'){assert.equal(request.method(),'PATCH');notificationRead=true;data={ok:true};}
       else if(endpoint==='/my/bills')data=[{id:5,number:'AA-INV-2026-000005',kind:'invoice',order_reference:order.reference,total:700,print_url:'/bills/5/print'}];
       else if(endpoint==='/bills/5/print'){assert.equal(authenticated,true);await route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Customer invoice</title><h1>AA-INV-2026-000005</h1><p>Commercial invoice · Alagar Automobiles</p>'});return;}
       else if(endpoint==='/my/requests')data={enquiries:[{id:4,reference:'ENQ-MOCKED-UI',part_name:'Test stator',status:'Quotation Sent',quotation_amount:700,updated_at:'2026-11-13 08:00:00'}],exchanges:[]};
-      else if(endpoint==='/users/'+user.phone){assert.equal(request.method(),'PUT');Object.assign(user,body);data={ok:true};}
+      else if(endpoint==='/me'){assert.equal(request.method(),'PUT');Object.assign(user,body);data={ok:true};}
       else if(endpoint==='/tracking'){assert.equal(body.reference,order.reference);data={...order,tracking_type:'internal',history:[{status:'Order Placed',created_at:'2026-11-13 07:00:00'},{status:'Order Confirmed',created_at:'2026-11-13 08:00:00'}]};}
       else if(endpoint==='/payments/create'){assert.equal(body.reference,order.reference);data={key_id:'rzp_test_ui_double',amount:70000,currency:'INR',order_id:'order_mocked_ui',reference:order.reference};}
       else if(endpoint==='/payments/verify'){assert.equal(body.razorpay_order_id,'order_mocked_ui');if(verifyMode==='rejected'){status=400;data={error:'Payment verification failed.'};}else{order.payment_status='captured';data={status:'captured'};}}
@@ -65,6 +65,7 @@ const server = http.createServer(async (request,response) => {
       await route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
     });
     await page.goto(base+'/dashboard.html');
+    await page.locator('#phoneSignInDetails summary').click();
     await page.locator('#signInForm [name="phone"]').fill(user.phone);
     await page.locator('#signInForm button').click();
     await page.locator('#verifyForm').waitFor();
@@ -100,7 +101,7 @@ const server = http.createServer(async (request,response) => {
     await page.waitForFunction(()=>document.querySelector('#toast')?.textContent.includes('Payment verified'));
     await page.locator('#profileForm').waitFor();assert.equal(await page.locator('[data-pay]').count(),0);assert.ok((await page.locator('#app').innerText()).includes('captured'));
     assert.equal(calls.filter(call=>call.endpoint==='/payments/verify').length,verificationCount+1);
-    await page.locator('#customerLogout').click();await page.locator('#signInForm').waitFor();assert.equal(authenticated,false);
+    await page.locator('#customerLogout').click();await page.locator('#signInForm').waitFor({state:'attached'});assert.equal(await page.locator('#phoneSignInDetails').evaluate(node=>node.open),false);assert.equal(authenticated,false);
     assert.deepEqual(pageErrors,[]);
     console.log('PASS mocked-provider UI: Razorpay checkout inputs, rejected verification, failed/dismissed checkout without success, captured response display and sign-out.');
     console.log('These are mocked provider/UI contract checks; no live SMS or payment service was exercised.');

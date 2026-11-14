@@ -1,13 +1,13 @@
 {
   "name": "aamm-website",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Alagar Automobiles spare-parts catalogue, customer invoices and business management",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test test/*.test.js",
-    "test:browser": "node test/frontend-browser.cjs && node test/account-provider-ui.cjs && node test/part-location-browser.cjs"
+    "test:browser": "node test/frontend-browser.cjs && node test/account-provider-ui.cjs && node test/google-login-ui.cjs && node test/part-location-browser.cjs && node test/buy-now-browser.cjs"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +16,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "google-auth-library": "^11.3.4",
     "sqlite3": "^5.1.7"
   },
   "engines": {
