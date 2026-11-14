@@ -23,7 +23,16 @@ const gisDouble = `
   window.__gis = { initializeCalls:[], renderCalls:[], promptCalls:0, disableCalls:0 };
   window.google = { accounts: { id: {
     initialize(options) { window.__gis.options=options;window.__gis.initializeCalls.push({client_id:options.client_id,nonce:options.nonce,auto_select:options.auto_select,ux_mode:options.ux_mode,callbackType:typeof options.callback}); },
-    renderButton(host, options) { window.__gis.renderCalls.push({hostId:host.id,options});const button=document.createElement('button');button.type='button';button.dataset.mockedGoogleButton='true';button.textContent='Sign in with Google';button.style.maxWidth='100%';button.style.width=options.width?options.width+'px':'280px';button.style.minHeight='44px';button.onclick=()=>window.__gis.options.callback({credential:'mocked-google-id-token'});host.replaceChildren(button); },
+    renderButton(host, options) {
+      window.__gis.renderCalls.push({hostId:host.id,options});
+      // GIS fixes its wrapper/iframe width at render time; it does not shrink
+      // automatically when the host later becomes narrower.
+      const width=options.width||280,wrapper=document.createElement('div');
+      wrapper.dataset.mockedGoogleWrapper='true';wrapper.style.cssText='position:relative;width:'+width+'px;min-width:'+width+'px;max-width:none;height:44px';
+      const iframe=document.createElement('iframe');iframe.title='Mocked Google sign-in';iframe.width=String(width);iframe.height='44';iframe.srcdoc='<!doctype html><title>Mocked Google sign-in</title>';iframe.style.cssText='display:block;border:0;width:'+width+'px;min-width:'+width+'px;max-width:none;height:44px';
+      const button=document.createElement('button');button.type='button';button.dataset.mockedGoogleButton='true';button.textContent='Sign in with Google';button.style.cssText='position:absolute;inset:0;width:'+width+'px;max-width:none;min-height:44px';button.onclick=()=>window.__gis.options.callback({credential:'mocked-google-id-token'});
+      wrapper.append(iframe,button);host.replaceChildren(wrapper);
+    },
     prompt() { window.__gis.promptCalls++; },
     disableAutoSelect() { window.__gis.disableCalls++; },
     cancel() {}
@@ -37,6 +46,17 @@ const gisDouble = `
   const browser = await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
   try {
     const context = await browser.newContext({viewport:{width:1280,height:900}});
+    await context.addInitScript(() => {
+      const NativeResizeObserver=window.ResizeObserver;
+      const state={active:0,created:0,observeCalls:0,disconnectCalls:0};
+      window.__resizeObserverState=state;
+      window.ResizeObserver=class {
+        constructor(callback){state.created++;this.targets=new Set();this.native=new NativeResizeObserver(entries=>callback(entries,this));}
+        observe(target,options){if(!this.targets.size)state.active++;this.targets.add(target);state.observeCalls++;this.native.observe(target,options);}
+        unobserve(target){const observed=this.targets.delete(target);if(observed&&!this.targets.size)state.active--;this.native.unobserve(target);}
+        disconnect(){if(this.targets.size)state.active--;this.targets.clear();state.disconnectCalls++;this.native.disconnect();}
+      };
+    });
     const page = await context.newPage();page.setDefaultTimeout(10000);
     const errors = [];page.on('pageerror',error=>errors.push(error.message));
     let configured = true,authenticated = false,failFirstGoogle = true,challengeCount = 0,gisRequests = 0,failNextGisLoad = false;
@@ -77,15 +97,43 @@ const gisDouble = `
     assert.equal(await page.locator('#googleError').getAttribute('role'),'alert');
     assert.equal(await page.locator('#googleStatus').getAttribute('aria-live'),'polite');
 
+    await page.waitForFunction(()=>window.__gis.renderCalls.at(-1)?.options.width===340);
+    const desktopRenders=await page.evaluate(()=>window.__gis.renderCalls.length);
+    const desktopInitializations=await page.evaluate(()=>window.__gis.initializeCalls.length);
+    const desktopChallenges=challengeCount;
+    assert.equal(await page.evaluate(()=>window.__resizeObserverState.active),1,'One resize observer watches the current Google host');
+    await page.setViewportSize({width:320,height:844});
+    await page.waitForFunction(previous=>window.__gis.renderCalls.length>previous,desktopRenders);
+    await page.waitForFunction(()=>window.__gis.renderCalls.at(-1).options.width<=document.getElementById('googleButton').clientWidth+1&&document.documentElement.scrollWidth<=innerWidth);
+    assert.equal(await page.evaluate(()=>window.__gis.initializeCalls.length),desktopInitializations,'Resizing must not initialize Google again');
+    assert.equal(challengeCount,desktopChallenges,'Resizing must not request another nonce');
+    assert.equal(await page.evaluate(()=>window.__gis.options.nonce),initial.nonce);
+    const mobileRenders=await page.evaluate(()=>window.__gis.renderCalls.length);
+    await page.setViewportSize({width:1280,height:900});
+    await page.waitForFunction(previous=>window.__gis.renderCalls.length>previous&&window.__gis.renderCalls.at(-1).options.width===340,mobileRenders);
+    assert.equal(await page.evaluate(()=>window.__gis.initializeCalls.length),desktopInitializations);
+    assert.equal(challengeCount,desktopChallenges);
+    assert.equal(await page.evaluate(()=>window.__resizeObserverState.active),1);
+    const disconnectsBeforeRetry=await page.evaluate(()=>window.__resizeObserverState.disconnectCalls);
+    console.log('PASS mocked Google resize: fixed-width desktop GIS iframe rerenders within320px then returns to340px, preserving initialization and nonce.');
+
     await page.locator('#googleButton [data-mocked-google-button]').click();
     await page.waitForFunction(()=>window.__gis.initializeCalls.length>=2);
     assert.equal(await page.locator('#profileForm').count(),0,'A rejected Google credential must not open an account');
     assert.equal(challengeCount,2,'Credential failure must acquire a fresh nonce before retry');
     const retryNonce = await page.evaluate(()=>window.__gis.initializeCalls.at(-1).nonce);
     assert.notEqual(retryNonce,initial.nonce);
+    assert.equal(await page.evaluate(()=>window.__resizeObserverState.active),1,'Fresh credential retry must replace the old observer, without a leak');
+    assert.ok(await page.evaluate(()=>window.__resizeObserverState.disconnectCalls)>disconnectsBeforeRetry);
     await page.locator('#googleButton [data-mocked-google-button]').click();
     await page.locator('#profileForm').waitFor();
     assert.equal(authenticated,true);
+    await page.waitForFunction(()=>window.__resizeObserverState.active===0);
+    const rendersAfterSuccess=await page.evaluate(()=>window.__gis.renderCalls.length);
+    await page.setViewportSize({width:320,height:844});await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(()=>window.__gis.renderCalls.length),rendersAfterSuccess,'Authenticated profile must not keep rendering a disconnected Google host');
+
     const email = page.locator('#profileForm [name="email"]');
     assert.equal(await email.inputValue(),user.google_email);
     assert.equal(await email.evaluate(node=>node.readOnly),true,'Google email must be read-only');
@@ -116,6 +164,19 @@ const gisDouble = `
     await page.locator('#googleRetry').click();await page.locator('#googleButton [data-mocked-google-button]').waitFor();
     assert.ok(challengeCount>=challengesBeforeSdkFailure+2,'SDK retry must create a fresh challenge');
     console.log('PASS mocked Google UI: failed official SDK load shows an accessible retry and recovers with a fresh challenge.');
+    assert.equal(await page.evaluate(()=>window.__resizeObserverState.active),1);
+    const rendersBeforeRemoval=await page.evaluate(()=>window.__gis.renderCalls.length);
+    const disconnectsBeforeRemoval=await page.evaluate(()=>window.__resizeObserverState.disconnectCalls);
+    const challengesBeforeRemoval=challengeCount;
+    await page.evaluate(()=>document.getElementById('googleButton').remove());
+    await page.waitForFunction(()=>window.__resizeObserverState.active===0);
+    assert.ok(await page.evaluate(()=>window.__resizeObserverState.disconnectCalls)>disconnectsBeforeRemoval,'Removing the Google host disconnects its observer');
+    await page.setViewportSize({width:320,height:844});await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(()=>window.__gis.renderCalls.length),rendersBeforeRemoval);
+    assert.equal(challengeCount,challengesBeforeRemoval);
+    console.log('PASS mocked Google observer cleanup: credential retry has one observer; successful sign-in and manually removed hosts disconnect it without later renders.');
+
 
     await page.evaluate(()=>{localStorage.setItem('aamm_language',JSON.stringify('ta'));localStorage.setItem('aamm_theme','light');});
     await page.setViewportSize({width:390,height:844});await page.reload();
