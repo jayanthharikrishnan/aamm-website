@@ -4,7 +4,7 @@ The existing automotive spare-parts application, updated with a simple responsiv
 
 ## Run locally
 
-Use Node.js 22 or newer and npm:
+Use Node.js 24 LTS and npm, with Python, make and a C/C++ compiler available. Installation rebuilds SQLite for the host OS:
 
 ```sh
 npm ci
