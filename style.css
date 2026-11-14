@@ -2897,3 +2897,109 @@ html[lang="ta"] .primary-nav {
 .bill-link:hover {
   color: var(--accent);
 }
+
+/* Account sign-in stays focused on the official Google control. */
+.account-signin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+  gap: 60px;
+  align-items: start;
+  max-width: 940px;
+}
+.account-signin h2,
+.account-saved h2 {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0 0 13px;
+  letter-spacing: -.025em;
+}
+.account-signin > .muted {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.google-signin { margin: 21px 0 0; }
+.google-button-host {
+  width: 100%;
+  max-width: 340px;
+  min-height: 44px;
+}
+.google-button-host[aria-busy="true"] { pointer-events: none; }
+.google-button-host > div { max-width: 100%; }
+.signin-status,
+.signin-privacy,
+.account-field-help {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.signin-status:empty,
+.google-signin .error:empty { display: none; }
+.signin-status { margin: 10px 0; }
+.signin-privacy { max-width: 340px; margin: 13px 0 0; }
+.signin-privacy a { text-decoration: underline; text-underline-offset: 3px; }
+.google-signin .error { margin: 12px 0; font-size: 12px; }
+.account-phone-option {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.account-phone-option summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 30px;
+}
+.account-phone-option form { margin-top: 13px; }
+.account-guest { margin-top: 24px; max-width: 340px; }
+.account-owner { margin: 22px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.account-owner a { text-decoration: underline; text-underline-offset: 3px; }
+.account-saved { padding-top: 26px; }
+.account-saved h2 { font-size: 15px; margin-bottom: 20px; }
+.account-saved .footer-links { gap: 15px; font-size: 12px; }
+.account-field-help { display: block; font-weight: 400; }
+#profileForm input[readonly] { color: var(--muted); background: var(--surface-2); }
+@media (max-width: 700px) {
+  .account-signin-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .account-signin { max-width: 460px; }
+  .account-saved { padding: 8px 0 0; }
+  .account-signin h2 { font-size: 19px; }
+}
+
+/* A direct purchase keeps its selection separate from the saved cart. */
+.product-bottom { flex-wrap: wrap; }
+.product-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 12px;
+}
+.product-card-actions .add-button { flex: 0 0 34px; }
+.card-buy {
+  display: inline-flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.4;
+  text-align: center;
+}
+.card-buy:hover:not(:disabled) { border-color: var(--text); }
+.card-buy:disabled,.product-card-actions .add-button:disabled { opacity: .45; cursor: not-allowed; }
+.card-buy:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.product-primary-actions { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .card-buy { padding: 7px 5px; font-size: 10px; }
+  .product-card-actions { gap: 6px; }
+  .product-primary-actions .quantity { flex: 0 0 auto; }
+}
