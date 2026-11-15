@@ -88,16 +88,17 @@ async function main(){
     await page.locator('#detailPlus').click();await page.locator('#detailAdd').click();assert.equal(await page.locator('#cartCount').innerText(),'2');await page.locator('.wish-button-static').click();await goto(page,'wishlist.html');assert.equal(await page.locator('#app .product-card').count(),1);await page.reload();await page.locator('#app .product-card').waitFor();assert.equal(await page.locator('#app .product-card h3').innerText(),sample.display_name);
     await goto(page,'index.html');assert.ok((await page.locator('#app').innerText()).includes(sample.display_name));
   });
-  await check('direct product links expose on-demand guides with honest unknown and reduced-motion states',async()=>{
+  await check('direct product links automatically show location guides with honest unknown and reduced-motion states',async()=>{
     const known=catalogue.find(p=>p.category==='Alternator (Dynamo)'&&p.subcategory==='Stator');
     const unknown=catalogue.find(p=>p.subcategory==='Wiper Brush Rocker');assert.ok(known&&unknown);
     await page.emulateMedia({reducedMotion:'no-preference'});await goto(page,`product.html?id=${known.id}`);
-    const guide=page.locator('#partLocation details');assert.equal(await guide.getAttribute('open'),null);assert.equal(await page.locator('#partLocation svg[role="img"]').count(),1);
-    await guide.locator('summary').focus();await page.keyboard.press('Enter');await page.locator('#partLocation [data-play]').click();assert.equal(await page.locator('#partLocation [data-play]').innerText(),'Pause');
+    const guide=page.locator('#partLocation details');assert.equal(await guide.evaluate(node=>node.open),true);assert.equal(await page.locator('#partLocation svg[role="img"]').count(),1);
+    await page.locator('#partLocation .pl-stage').scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('#partLocation [data-play]').textContent==='Pause');
+    assert.equal(await page.locator('#partLocation [data-moving]').evaluate(node=>node.getAnimations().some(animation=>animation.playState==='running')),true,'Visible guide animates without opening or Play input');
     await page.locator('#partLocation [data-play]').click();assert.equal(await page.locator('#partLocation [data-play]').innerText(),'Continue');
-    await page.emulateMedia({reducedMotion:'reduce'});await page.locator('#partLocation [data-play]').click();assert.match(await page.locator('#partLocation [data-status]').innerText(),/without motion/);assert.equal(await page.locator('#partLocation [data-moving]').evaluate(node=>node.getAnimations().length),0);
+    await page.emulateMedia({reducedMotion:'reduce'});await page.waitForFunction(()=>document.querySelector('#partLocation [data-status]').textContent.includes('without motion'));assert.match(await page.locator('#partLocation [data-status]').innerText(),/without motion/);assert.equal(await page.locator('#partLocation [data-moving]').evaluate(node=>node.getAnimations().length),0);
     await page.screenshot({path:path.join(artifacts,'product-location-known.png'),fullPage:true});
-    await goto(page,`product.html?id=${unknown.id}`);await page.locator('#partLocation summary').click();assert.equal(await page.locator('#partLocation [data-play]').count(),0);assert.equal(await page.locator('#partLocation svg[role="img"]').count(),0);assert.match(await page.locator('#partLocation .pl-description').innerText(),/will not guess/);
+    await goto(page,`product.html?id=${unknown.id}`);assert.equal(await page.locator('#partLocation details').evaluate(node=>node.open),true);assert.equal(await page.locator('#partLocation [data-play]').count(),0);assert.equal(await page.locator('#partLocation svg[role="img"]').count(),0);assert.match(await page.locator('#partLocation .pl-description').innerText(),/will not guess/);
     await page.screenshot({path:path.join(artifacts,'product-location-unknown.png'),fullPage:true});
   });
   let order;
