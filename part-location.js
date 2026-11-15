@@ -8,7 +8,7 @@
   let nextId = 0;
   const dictionary = {
     heading: ['Where does this part go?', 'இந்த பாகம் எங்கே பொருத்தப்படுகிறது?'],
-    hint: ['Open the location guide', 'பாகத்தின் இடத்தைக் காண்க'],
+    hint: ['Part location shown automatically', 'பாகத்தின் இடம் தானாகக் காட்டப்படும்'],
     starter: ['Starter motor', 'ஸ்டார்டர் மோட்டார்'],
     alternator: ['Alternator', 'ஆல்டர்னேட்டர்'],
     play: ['Play animation', 'இயக்கிக் காண்க'],
@@ -16,7 +16,7 @@
     resume: ['Continue', 'தொடரவும்'],
     replay: ['Replay', 'மீண்டும் இயக்கு'],
     show: ['Show position', 'இடத்தைக் காட்டு'],
-    ready: ['Play to see the highlighted part move into its typical assembly position.', 'பாகம் பொதுவாக அமையும் இடத்தைக் காண இயக்கவும்.'],
+    ready: ['The animation starts automatically when the diagram comes into view.', 'வரைபடம் திரையில் தெரியும்போது அசைவுப் படம் தானாக இயங்கும்.'],
     running: ['Moving the highlighted part into the assembly.', 'குறிப்பிட்ட பாகம் அமைப்பில் அமையும் இடம் காட்டப்படுகிறது.'],
     paused: ['Animation paused.', 'அசைவுப் படம் இடைநிறுத்தப்பட்டுள்ளது.'],
     finished: ['The highlight shows the typical position of this component.', 'குறிப்பிட்ட பாகம் பொதுவாக அமையும் இடம் காட்டப்பட்டுள்ளது.'],
@@ -119,15 +119,18 @@
     const heading = escape(text(dictionary.heading));
     const inquiry = new URL('https://wa.me/919344898473');
     inquiry.searchParams.set('text', language ? `வணக்கம் அழகர் ஆட்டோமொபைல்ஸ், ${product.display_name || product.name || 'இந்த பாகம்'} எங்கே அமைகிறது என்பதைத் தெரிந்து கொள்ள விரும்புகிறேன். பாகத்தின் எண் மற்றும் வாகனப் பொருத்தத்தை உறுதி செய்ய உதவுங்கள்.` : `Hello Alagar Automobiles, where does ${product.display_name || product.name || 'this part'} fit? Please help confirm the assembly location, part number and vehicle fitment.`);
-    container.innerHTML = `<details class="part-location" id="${id}"><summary><span><strong>${heading}</strong><small>${escape(text(dictionary.hint))}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary><div class="pl-content">${guide.supported ? `<h2 class="pl-title">${escape(text(guide.position.label))} <span>· ${escape(text(dictionary[guide.assembly]))}</span></h2><p class="pl-description">${escape(text(guide.position.description))}</p><figure class="pl-stage"><div class="pl-schematic-tag">${escape(text(dictionary.generic))}</div>${assemblySvg(guide.assembly, guide.position, id, text)}</figure><div class="pl-actions"><button type="button" class="pl-control pl-primary" data-play>${escape(text(dictionary.play))}</button></div><p class="pl-status" role="status" aria-live="polite" data-status>${escape(text(dictionary.ready))}</p><p class="pl-note">${escape(text(dictionary.note))}</p>` : `<h2 class="pl-title">${escape(text(dictionary.unknownTitle))}</h2><p class="pl-description">${escape(text(dictionary.unknown))}</p><a class="pl-contact" href="${escape(inquiry.toString())}" target="_blank" rel="noopener">${escape(text(dictionary.contact))}<span aria-hidden="true">↗</span></a>`}</div></details>`;
+    container.innerHTML = `<details class="part-location" id="${id}" open><summary><span><strong>${heading}</strong><small>${escape(text(dictionary.hint))}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary><div class="pl-content">${guide.supported ? `<h2 class="pl-title">${escape(text(guide.position.label))} <span>· ${escape(text(dictionary[guide.assembly]))}</span></h2><p class="pl-description">${escape(text(guide.position.description))}</p><figure class="pl-stage"><div class="pl-schematic-tag">${escape(text(dictionary.generic))}</div>${assemblySvg(guide.assembly, guide.position, id, text)}</figure><div class="pl-actions"><button type="button" class="pl-control pl-primary" data-play>${escape(text(dictionary.play))}</button></div><p class="pl-status" role="status" aria-live="polite" data-status>${escape(text(dictionary.ready))}</p><p class="pl-note">${escape(text(dictionary.note))}</p>` : `<h2 class="pl-title">${escape(text(dictionary.unknownTitle))}</h2><p class="pl-description">${escape(text(dictionary.unknown))}</p><a class="pl-contact" href="${escape(inquiry.toString())}" target="_blank" rel="noopener">${escape(text(dictionary.contact))}<span aria-hidden="true">↗</span></a>`}</div></details>`;
     const details = container.querySelector('details');
     let animation = null;
+    let visibilityObserver = null;
+    let autoplayPending = false;
     let reduced;
     let visibility;
     let toggle;
     let mediaChange;
     if (guide.supported) {
       const moving = container.querySelector('[data-moving]');
+      const stage = container.querySelector('.pl-stage');
       const play = container.querySelector('[data-play]');
       const status = container.querySelector('[data-status]');
       reduced = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -159,20 +162,43 @@
         state = 'running'; label('pause'); setStatus('running');
         active.finished.then(() => { if (animation === active) { state = 'finished'; label('replay'); setStatus('finished'); } }).catch(() => {});
       }
+      function stopAutoplayWatch() {
+        autoplayPending = false;
+        visibilityObserver?.disconnect();
+        visibilityObserver = null;
+      }
+      function autoplayWhenVisible() {
+        if (!autoplayPending || !details.open || document.hidden || !container.isConnected) return;
+        const bounds = stage.getBoundingClientRect();
+        if (bounds.bottom <= 0 || bounds.top >= window.innerHeight || bounds.right <= 0 || bounds.left >= window.innerWidth) return;
+        stopAutoplayWatch();
+        start();
+      }
       play.onclick = () => {
+        stopAutoplayWatch();
         if (state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); }
         else if (state === 'paused') { animation.play(); state = 'running'; label('pause'); setStatus('running'); }
         else start();
       };
-      toggle = () => { if (!details.open && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } };
-      visibility = () => { if (document.hidden && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } };
-      mediaChange = event => { if (event.matches) { showFinal(true); } else { label(state === 'finished' ? 'replay' : 'play'); } };
+      toggle = () => { if (!details.open && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } else if (details.open) autoplayWhenVisible(); };
+      visibility = () => { if (document.hidden && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } else if (!document.hidden) autoplayWhenVisible(); };
+      mediaChange = event => { if (event.matches) { stopAutoplayWatch(); showFinal(true); } else { label(state === 'finished' ? 'replay' : 'play'); } };
       details.addEventListener('toggle', toggle);
       document.addEventListener('visibilitychange', visibility);
       reduced?.addEventListener?.('change', mediaChange);
-      if (reduced?.matches) { label('show'); setStatus('ready'); }
+      if (reduced?.matches) showFinal(true);
+      else if (typeof window.IntersectionObserver === 'function') {
+        autoplayPending = true;
+        visibilityObserver = new IntersectionObserver(entries => {
+          if (entries.some(entry => entry.isIntersecting)) autoplayWhenVisible();
+        }, { threshold: 0 });
+        visibilityObserver.observe(stage);
+        autoplayWhenVisible();
+      } else start();
     }
     const cleanup = () => {
+      autoplayPending = false;
+      visibilityObserver?.disconnect();
       animation?.cancel();
       if (toggle) details.removeEventListener('toggle', toggle);
       if (visibility) document.removeEventListener('visibilitychange', visibility);

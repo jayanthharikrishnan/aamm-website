@@ -38,7 +38,7 @@ The first command runs backend and provider-contract tests with disposable data.
 - `*.html`, `style.css`, `script.js`: responsive customer interface and shared UI behavior.
 - `admin.html`, `admin.js`: authenticated administration interface.
 - `images/logo.jpeg`: original logo symbol, inverted in light mode; product photo areas intentionally use placeholders.
-- `part-location.js`, `part-location.css`: optional educational component-location guides with reduced-motion support (94 catalogue records mapped; 43 ask for confirmation).
+- `part-location.js`, `part-location.css`: automatically displayed educational component-location guides with autoplay and reduced-motion support (94 catalogue records mapped; 43 ask for confirmation).
 - `lib/billing.js`, `lib/billing-store.js`, `lib/sms.js`: immutable commercial invoices/verified payment receipts and provider-backed transactional SMS.
 - `test/`: automated backend, integration and optional browser checks.
 - `docs/`: audit, API contracts, deployment and feature status.
