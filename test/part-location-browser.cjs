@@ -16,14 +16,44 @@ const root=path.resolve(__dirname,'..');
   assert.equal(await page.locator('details').evaluate(node=>node.open),true,'Guide is visible without opening its disclosure');
   await page.waitForFunction(()=>document.querySelector('[data-play]').textContent==='Pause');
   assert.equal(await page.locator('[data-moving]').evaluate(node=>node.getAnimations().some(animation=>animation.playState==='running')),true,'Animation starts without any input');
+  await page.evaluate(()=>{window.loopingGuideAnimation=document.querySelector('[data-moving]').getAnimations()[0];});
+  assert.equal(await page.evaluate(()=>window.loopingGuideAnimation.effect.getTiming().iterations),Infinity,'The animation repeats continuously');
+  await page.waitForFunction(()=>window.loopingGuideAnimation.currentTime>window.loopingGuideAnimation.effect.getTiming().duration+100,null,{timeout:10000});
+  assert.equal(await page.evaluate(()=>window.loopingGuideAnimation.playState),'running','The second cycle starts without Replay input');
+  assert.equal(await page.locator('button').evaluateAll(nodes=>nodes.some(node=>/Replay|மீண்டும் இயக்கு/.test(node.textContent))),false,'No Replay button is exposed');
   await page.locator('[data-play]').click();
   assert.equal(await page.locator('[data-play]').textContent(),'Continue');
-  await page.locator('[data-play]').click();
-  await page.waitForFunction(()=>document.querySelector('[data-status]').textContent.includes('typical position'));
+  assert.equal(await page.evaluate(()=>window.loopingGuideAnimation.playState),'paused');
+  // Returning to a user-paused diagram must not override that choice.
+  await page.evaluate(()=>{document.getElementById('guide').style.marginTop='1500px';window.scrollTo(0,0);});
+  await page.locator('.pl-stage').scrollIntoViewIfNeeded();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(()=>window.loopingGuideAnimation.playState),'paused','Scrolling back does not undo an explicit pause');
+  await page.locator('summary').focus();await page.keyboard.press('Enter');
+  await page.locator('summary').focus();await page.keyboard.press('Enter');
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(()=>window.loopingGuideAnimation.playState),'paused','Reopening does not undo an explicit pause');
   await page.locator('[data-play]').click();
   assert.equal(await page.locator('[data-play]').textContent(),'Pause');
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='running');
+
+  // Automatic visibility pauses resume on return, unlike an explicit pause.
   await page.locator('summary').focus();await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>document.querySelector('[data-play]').textContent==='Continue');
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='paused');
+  await page.locator('summary').focus();await page.keyboard.press('Enter');
+  await page.locator('.pl-stage').scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='running');
+  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='paused');
+  await page.locator('.pl-stage').scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='running');
+  // Dispatch real visibility events with the document visibility value supplied
+  // by this isolated browser fixture, without relying on headless tab focus.
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.guideDocumentHidden});window.guideDocumentHidden=true;document.dispatchEvent(new Event('visibilitychange'));});
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='paused');
+  await page.evaluate(()=>{window.guideDocumentHidden=false;document.dispatchEvent(new Event('visibilitychange'));});
+  await page.waitForFunction(()=>window.loopingGuideAnimation.playState==='running');
+  await page.evaluate(()=>{delete document.hidden;});
 
   // A guide below the initial fold must not finish before the customer sees it.
   await page.evaluate(()=>{
@@ -50,6 +80,14 @@ const root=path.resolve(__dirname,'..');
   await page.waitForFunction(()=>document.querySelector('[data-status]').textContent.includes('அசைவு இல்லாமல்'));
   assert.match(await page.locator('[data-status]').textContent(),/அசைவு இல்லாமல்/);
   assert.equal(await page.evaluate(()=>document.querySelector('[data-moving]').getAnimations().length),0);
+  assert.equal(await page.locator('[data-play]').isVisible(),false,'Static reduced-motion position needs no animation control');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.setViewportSize({width:320,height:844});
+  await page.evaluate(()=>PartLocation.mount(document.getElementById('guide'),{category:'Self Motor',subcategory:'Armature'},{language:'ta'}));
+  await page.waitForFunction(()=>document.querySelector('[data-moving]').getAnimations().some(animation=>animation.playState==='running'));
+  assert.equal(await page.locator('[data-play]').textContent(),'இடைநிறுத்து');
+  assert.equal(await page.locator('button').evaluateAll(nodes=>nodes.some(node=>/Replay|மீண்டும் இயக்கு/.test(node.textContent))),false);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(()=>PartLocation.mount(document.getElementById('guide'),{category:'Self Motor',subcategory:'Wiper Brush Rocker',display_name:'Tata Ace Wiper Brush'},{language:'en'}));
   assert.equal(await page.locator('details').evaluate(node=>node.open),true);
@@ -60,6 +98,6 @@ const root=path.resolve(__dirname,'..');
   await page.evaluate(()=>PartLocation.mount(document.getElementById('guide'),{category:'Self Motor',subcategory:'<img src=x onerror=alert(1)>',display_name:'<script>bad()</script>'},{language:'en'}));
   assert.equal(await page.locator('#guide img, #guide script').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS part-location: default-open autoplay without input, below-fold visibility start, pause/resume/replay, keyboard close-pause, cleanup, automatic reduced-motion position, Tamil, narrow layout, unknown location and escaped content; no browser errors');
+  console.log('PASS part-location: default-open infinite looping into a second cycle without input or Replay, user pause/resume, automatic viewport/background/collapse pause and return, below-fold start, cleanup, static reduced-motion mode without controls, Tamil/mobile, unknown location and escaped content; no browser errors');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});
