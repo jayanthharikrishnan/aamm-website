@@ -11,11 +11,8 @@
     hint: ['Part location shown automatically', 'பாகத்தின் இடம் தானாகக் காட்டப்படும்'],
     starter: ['Starter motor', 'ஸ்டார்டர் மோட்டார்'],
     alternator: ['Alternator', 'ஆல்டர்னேட்டர்'],
-    play: ['Play animation', 'இயக்கிக் காண்க'],
     pause: ['Pause', 'இடைநிறுத்து'],
     resume: ['Continue', 'தொடரவும்'],
-    replay: ['Replay', 'மீண்டும் இயக்கு'],
-    show: ['Show position', 'இடத்தைக் காட்டு'],
     ready: ['The animation starts automatically when the diagram comes into view.', 'வரைபடம் திரையில் தெரியும்போது அசைவுப் படம் தானாக இயங்கும்.'],
     running: ['Moving the highlighted part into the assembly.', 'குறிப்பிட்ட பாகம் அமைப்பில் அமையும் இடம் காட்டப்படுகிறது.'],
     paused: ['Animation paused.', 'அசைவுப் படம் இடைநிறுத்தப்பட்டுள்ளது.'],
@@ -119,15 +116,16 @@
     const heading = escape(text(dictionary.heading));
     const inquiry = new URL('https://wa.me/919344898473');
     inquiry.searchParams.set('text', language ? `வணக்கம் அழகர் ஆட்டோமொபைல்ஸ், ${product.display_name || product.name || 'இந்த பாகம்'} எங்கே அமைகிறது என்பதைத் தெரிந்து கொள்ள விரும்புகிறேன். பாகத்தின் எண் மற்றும் வாகனப் பொருத்தத்தை உறுதி செய்ய உதவுங்கள்.` : `Hello Alagar Automobiles, where does ${product.display_name || product.name || 'this part'} fit? Please help confirm the assembly location, part number and vehicle fitment.`);
-    container.innerHTML = `<details class="part-location" id="${id}" open><summary><span><strong>${heading}</strong><small>${escape(text(dictionary.hint))}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary><div class="pl-content">${guide.supported ? `<h2 class="pl-title">${escape(text(guide.position.label))} <span>· ${escape(text(dictionary[guide.assembly]))}</span></h2><p class="pl-description">${escape(text(guide.position.description))}</p><figure class="pl-stage"><div class="pl-schematic-tag">${escape(text(dictionary.generic))}</div>${assemblySvg(guide.assembly, guide.position, id, text)}</figure><div class="pl-actions"><button type="button" class="pl-control pl-primary" data-play>${escape(text(dictionary.play))}</button></div><p class="pl-status" role="status" aria-live="polite" data-status>${escape(text(dictionary.ready))}</p><p class="pl-note">${escape(text(dictionary.note))}</p>` : `<h2 class="pl-title">${escape(text(dictionary.unknownTitle))}</h2><p class="pl-description">${escape(text(dictionary.unknown))}</p><a class="pl-contact" href="${escape(inquiry.toString())}" target="_blank" rel="noopener">${escape(text(dictionary.contact))}<span aria-hidden="true">↗</span></a>`}</div></details>`;
+    container.innerHTML = `<details class="part-location" id="${id}" open><summary><span><strong>${heading}</strong><small>${escape(text(dictionary.hint))}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary><div class="pl-content">${guide.supported ? `<h2 class="pl-title">${escape(text(guide.position.label))} <span>· ${escape(text(dictionary[guide.assembly]))}</span></h2><p class="pl-description">${escape(text(guide.position.description))}</p><figure class="pl-stage"><div class="pl-schematic-tag">${escape(text(dictionary.generic))}</div>${assemblySvg(guide.assembly, guide.position, id, text)}</figure><div class="pl-actions"><button type="button" class="pl-control pl-primary" data-play hidden>${escape(text(dictionary.pause))}</button></div><p class="pl-status" role="status" aria-live="polite" data-status>${escape(text(dictionary.ready))}</p><p class="pl-note">${escape(text(dictionary.note))}</p>` : `<h2 class="pl-title">${escape(text(dictionary.unknownTitle))}</h2><p class="pl-description">${escape(text(dictionary.unknown))}</p><a class="pl-contact" href="${escape(inquiry.toString())}" target="_blank" rel="noopener">${escape(text(dictionary.contact))}<span aria-hidden="true">↗</span></a>`}</div></details>`;
     const details = container.querySelector('details');
     let animation = null;
     let visibilityObserver = null;
-    let autoplayPending = false;
+    let disposed = false;
     let reduced;
     let visibility;
     let toggle;
     let mediaChange;
+    let scrollVisibility;
     if (guide.supported) {
       const moving = container.querySelector('[data-moving]');
       const stage = container.querySelector('.pl-stage');
@@ -135,6 +133,7 @@
       const status = container.querySelector('[data-status]');
       reduced = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
       let state = 'ready';
+      let userPaused = false;
       const label = key => { play.textContent = text(dictionary[key]); };
       const setStatus = key => { status.textContent = text(dictionary[key]); };
       function showFinal(isReduced) {
@@ -142,7 +141,7 @@
         moving.style.opacity = '1';
         moving.style.transform = 'none';
         state = 'finished';
-        label(isReduced ? 'show' : 'replay');
+        play.hidden = true;
         setStatus(isReduced ? 'reduced' : 'finished');
       }
       function start() {
@@ -153,56 +152,66 @@
         moving.style.transformOrigin = `${guide.position.point[0]}px ${guide.position.point[1]}px`;
         moving.style.transformBox = 'view-box';
         moving.style.opacity = '1';
+        play.hidden = false;
         animation = moving.animate([
           { transform: `translate(${dx}px, ${dy}px) scale(.72)`, opacity: .92, offset: 0 },
-          { transform: `translate(${dx}px, ${dy}px) scale(.72)`, opacity: .92, offset: .15 },
+          { transform: `translate(${dx}px, ${dy}px) scale(.72)`, opacity: .92, offset: .12 },
+          { transform: 'translate(0, 0) scale(1)', opacity: 1, offset: .78 },
           { transform: 'translate(0, 0) scale(1)', opacity: 1, offset: 1 },
-        ], { duration: 2200, easing: 'cubic-bezier(.35,0,.2,1)', fill: 'forwards' });
-        const active = animation;
+        ], { duration: 3000, iterations: Infinity, easing: 'cubic-bezier(.35,0,.2,1)', fill: 'both' });
         state = 'running'; label('pause'); setStatus('running');
-        active.finished.then(() => { if (animation === active) { state = 'finished'; label('replay'); setStatus('finished'); } }).catch(() => {});
       }
-      function stopAutoplayWatch() {
-        autoplayPending = false;
-        visibilityObserver?.disconnect();
-        visibilityObserver = null;
+      function pause() {
+        if (state !== 'running') return;
+        animation.pause();
+        state = 'paused'; label('resume'); setStatus('paused');
       }
-      function autoplayWhenVisible() {
-        if (!autoplayPending || !details.open || document.hidden || !container.isConnected) return;
+      function syncPlayback() {
+        if (disposed || !container.isConnected) return;
+        if (reduced?.matches || typeof moving.animate !== 'function') { showFinal(Boolean(reduced?.matches)); return; }
+        if (userPaused) {
+          pause();
+          play.hidden = false;
+          label('resume'); setStatus('paused');
+          return;
+        }
         const bounds = stage.getBoundingClientRect();
-        if (bounds.bottom <= 0 || bounds.top >= window.innerHeight || bounds.right <= 0 || bounds.left >= window.innerWidth) return;
-        stopAutoplayWatch();
-        start();
+        const visible = bounds.width > 0 && bounds.height > 0 && bounds.bottom > 0 && bounds.top < window.innerHeight && bounds.right > 0 && bounds.left < window.innerWidth;
+        if (!details.open || document.hidden || !visible) { pause(); return; }
+        if (!animation) start();
+        else if (state === 'paused') { animation.play(); state = 'running'; label('pause'); setStatus('running'); }
       }
       play.onclick = () => {
-        stopAutoplayWatch();
-        if (state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); }
-        else if (state === 'paused') { animation.play(); state = 'running'; label('pause'); setStatus('running'); }
-        else start();
+        userPaused = !userPaused;
+        syncPlayback();
       };
-      toggle = () => { if (!details.open && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } else if (details.open) autoplayWhenVisible(); };
-      visibility = () => { if (document.hidden && state === 'running') { animation.pause(); state = 'paused'; label('resume'); setStatus('paused'); } else if (!document.hidden) autoplayWhenVisible(); };
-      mediaChange = event => { if (event.matches) { stopAutoplayWatch(); showFinal(true); } else { label(state === 'finished' ? 'replay' : 'play'); } };
+      toggle = syncPlayback;
+      visibility = syncPlayback;
+      mediaChange = syncPlayback;
       details.addEventListener('toggle', toggle);
       document.addEventListener('visibilitychange', visibility);
       reduced?.addEventListener?.('change', mediaChange);
-      if (reduced?.matches) showFinal(true);
-      else if (typeof window.IntersectionObserver === 'function') {
-        autoplayPending = true;
-        visibilityObserver = new IntersectionObserver(entries => {
-          if (entries.some(entry => entry.isIntersecting)) autoplayWhenVisible();
-        }, { threshold: 0 });
+      if (typeof window.IntersectionObserver === 'function') {
+        visibilityObserver = new IntersectionObserver(syncPlayback, { threshold: 0 });
         visibilityObserver.observe(stage);
-        autoplayWhenVisible();
-      } else start();
+      } else {
+        scrollVisibility = syncPlayback;
+        window.addEventListener('scroll', scrollVisibility, { passive: true });
+        window.addEventListener('resize', scrollVisibility);
+      }
+      syncPlayback();
     }
     const cleanup = () => {
-      autoplayPending = false;
+      disposed = true;
       visibilityObserver?.disconnect();
       animation?.cancel();
       if (toggle) details.removeEventListener('toggle', toggle);
       if (visibility) document.removeEventListener('visibilitychange', visibility);
       if (mediaChange) reduced?.removeEventListener?.('change', mediaChange);
+      if (scrollVisibility) {
+        window.removeEventListener('scroll', scrollVisibility);
+        window.removeEventListener('resize', scrollVisibility);
+      }
       if (container._partLocationCleanup === cleanup) delete container._partLocationCleanup;
     };
     container._partLocationCleanup = cleanup;
